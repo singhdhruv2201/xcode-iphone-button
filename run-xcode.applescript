@@ -5,9 +5,9 @@ on run arguments
 	set phoneIdentifier to item 2 of arguments
 	if phoneName is "" or phoneIdentifier is "" then error "Device name and identifier are required."
 	set phoneDestination to "platform=iOS,id=" & phoneIdentifier
-	if application "Xcode" is not running then error "Open your project in Xcode on the Mac first."
+	if application id "com.apple.dt.Xcode" is not running then error "Open your project in Xcode on the Mac first."
 
-	tell application "Xcode"
+	tell application id "com.apple.dt.Xcode"
 		set currentWorkspace to active workspace document
 		if currentWorkspace is missing value then error "Select an open project window in Xcode first."
 		if not (loaded of currentWorkspace) then error "Xcode is still loading the project. Try again shortly."

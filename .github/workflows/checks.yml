@@ -8,5 +8,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: Register the selected Xcode scripting dictionary
+        run: |
+          developer_dir="$(xcode-select -p)"
+          xcode_app="${developer_dir%/Contents/Developer}"
+          /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$xcode_app"
       - name: Validate scripts and isolated installation
         run: sh tests/check.sh
