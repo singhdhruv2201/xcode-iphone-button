@@ -15,3 +15,9 @@ jobs:
           /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$xcode_app"
       - name: Validate scripts and isolated installation
         run: sh tests/check.sh
+      - name: Validate diagnostic request cleanup
+        run: python3 -m unittest discover -s tests -p 'test_handoff_probe.py' -v
+      - name: Validate phone probe protocol handling
+        run: swift test --package-path experiments/PhoneInstallProbe
+      - name: Validate private build server access controls
+        run: python3 -m unittest discover -s tests -p 'test_build*.py' -v

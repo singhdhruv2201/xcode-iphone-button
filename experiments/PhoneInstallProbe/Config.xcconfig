@@ -1,0 +1,2 @@
+PROBE_BUNDLE_ID = org.xcodeiphonebutton.PhoneInstallProbe
+#include? "Signing.local.xcconfig"
