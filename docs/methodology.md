@@ -39,6 +39,7 @@ We recorded each milestone separately. An SSH success message, a ping, an advert
 | Scoped ATS/private-certificate policy and clearer diagnostics | Phone accepted pinned HTTPS, verified size/hash, and staged the build in approximately 0.9 seconds | Fixed the observed setup while retaining certificate pinning and endpoint restrictions. No low-level trace established the original internal rejection precisely. |
 | Downloaded artifact → offline local installation → launch | User confirmed success | Replaced target USB staging with a real cellular download. |
 | App coordinator + fixed-project build jobs + three Shortcuts | User confirmed one-tap install, restored internet, and working target app | Combined the proven components; Mac job completion was independently recorded. |
+| Project picker + selected-project CLI jobs | User selected a project/scheme on the phone and confirmed install, restored internet and working launch | Discovery and scheme resolution work without manually opening the project; Mac job and artifact remain bound to the phone selection. |
 
 A Wi-Fi-specific Network framework path was reported before and after phone probes. USB unplugged, Cellular Data state, and selected VPN remained operator-controlled observations, not independently measured by that path API.
 
@@ -66,11 +67,11 @@ The native binary dependency is pinned by release URL and SHA-256. Its MIT licen
 
 ## Exact artifact and job discipline
 
-The phone submits a canonical UUID to authenticated `POST /jobs`. The server accepts no project path, shell command, scheme, or signing identity from that request. Those belong to a private fixed configuration. Duplicate UUIDs return the same job, concurrent jobs are rejected, and unfinished jobs become failed records on server restart.
+The initial proven flow submitted a UUID for a privately configured fixed target. The project picker extends `POST /jobs` with an opaque catalog project ID and scheme. The Mac scans trusted roots, resolves the scheme through Xcode, and retains authoritative absolute paths. Duplicate UUIDs must retain their selection, concurrent jobs are rejected, and unfinished jobs fail on server restart. Clients cannot provide shell commands, absolute paths, outputs or signing identities.
 
-For a new job, the helper increments the configured project's integer build number, builds through Xcode for the generic iOS device destination, checks the build result, verifies the signed output/profile and expected version, then packages it. The manifest includes schema, display name, bundle ID, build version, byte count and SHA-256. The artifact is retrieved by its content hash, so a later job cannot silently replace the bytes associated with an earlier job.
+For a selected job, the helper reserves a per-bundle numeric build version privately, builds through Xcode’s CLI for the generic iOS destination with a command-line version override, validates the resolved bundle identity, signed output/profile and expected version, then packages it. The project file remains unchanged. The legacy fixed-target route retains its earlier version-file update behavior. The manifest includes schema, display name, bundle ID, build version, byte count and SHA-256. The artifact is retrieved by its content hash, so a later job cannot silently replace the bytes associated with an earlier job.
 
-The phone validates the candidate against its allowed target before publishing it to the staging cache. It removes the old valid manifest before replacing the artifact, and publishes the new manifest last. A crash during replacement must not label a partial file ready. Before installation, the coordinator checks that the staged hash still matches the selected job and verifies the file again.
+The phone validates every selected-job reply against the snapshotted project/scheme and uses that authenticated job’s artifact identity. Legacy manual downloads remain restricted to the original configured bundle. It validates the candidate before publishing it to the staging cache. It removes the old valid manifest before replacing the artifact, and publishes the new manifest last. A crash during replacement must not label a partial file ready. Before installation, the coordinator checks that the staged hash still matches the selected job and verifies the file again.
 
 Installation uses a unique AFC staging directory, Developer-package installation options, then an exact bundle/version lookup. An already-matching version is reported as already installed, not a fresh successful install. An install request without post-install verification is reported as uncertain. Launch remains a separate manual check.
 
@@ -101,10 +102,10 @@ Restoration enables data first, so a later VPN action error does not prevent tha
 3. **Keep secrets outside Git.** Server state is rejected inside any Git checkout. Local signing settings, build caches, provisioning files, app artifacts and signed Shortcuts are ignored and manually audited before publication.
 4. **Keep the endpoint private.** Bind only the chosen tailnet IPv4 address, require a bearer token, omit request logs, and expose no key/settings routes or directory listing. No firewall disablement or public router forwarding is part of setup.
 5. **Retain transport verification.** Exact certificate pin, IP/validity evaluation, approved endpoint range, HTTPS-only URLs, no redirects, and size/hash/app checks. The ATS policy change is scoped rather than global.
-6. **Keep remote execution bounded.** Fixed local project/scheme, one job at a time, idempotent UUIDs, bounded request body, sanitized errors, a build deadline, and a job-count cap.
+6. **Keep remote execution bounded.** Trusted catalog roots and validated schemes, one job at a time, idempotent UUIDs, bounded request body, sanitized errors, a build deadline, and a job-count cap.
 7. **Report evidence precisely.** Numeric sanitized error categories and explicit stage outcomes; no raw endpoint/key/device output in shareable reports.
 
-The bearer token still authorizes building the configured project, whose own build scripts run as the Mac user. This is a trusted personal-development tool, not a sandbox for untrusted projects or clients.
+The bearer token still authorizes building discovered trusted projects, whose own build scripts run as the Mac user. This is a trusted personal-development tool, not a sandbox for untrusted projects or clients.
 
 ## Reproducibility and validation
 
@@ -120,8 +121,8 @@ The publication check reviews the exact staged files and all reachable Git histo
 
 - Only the tested phone/setup is verified; future iOS and provider behavior can differ.
 - Initial trusted USB pairing, installer installation and connection import remain necessary. The documented upstream USB pairing bootstrap was checked in the pinned CLI help/source, not rerun on a clean device during publication.
-- The coordinator builds one privately configured `.xcodeproj`, not whichever Xcode window is currently active. It expects integer build-number entries and a known output path.
-- The Mac must stay awake and the helper must run. Automatic startup/wake, artifact cleanup, multi-project selection and app discovery are not implemented.
+- The picker supports projects/workspaces with one iPhone app per scheme, numeric build versions and working Mac signing. The selected-project flow has now passed on the physical phone: the user confirmed installation, internet restoration and working launch; the Mac independently recorded the matching job and artifact.
+- The Mac must stay awake and the helper must run. Automatic startup/wake and artifact cleanup are not implemented. Project discovery is limited to trusted configured roots.
 - The free Personal Team limits and provisioning expiry remain. The installer cannot automatically recover itself after its own profile expires.
 - Installation briefly disables cellular data. Continuous installation with cellular enabled was not established.
 - Native wait cancellation and recovery after process termination remain limited. An interrupted install needs inspection before retry.

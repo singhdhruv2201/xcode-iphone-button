@@ -9,6 +9,8 @@ public struct BuildFlowState: Codable, Sendable {
     public var phase: Phase = .connect
     public var nonce = UUID()
     public var started = Date()
+    public var selection: ProjectSelection?
+    public var purpose: String?
     public var artifactHash: String?
     public var result = ""
     public init() {}

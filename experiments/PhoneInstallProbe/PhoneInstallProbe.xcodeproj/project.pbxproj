@@ -81,6 +81,7 @@
 			<array>
 				<string>000000000000000000000004</string>
 				<string>000000000000000000000031</string>
+				<string>000000000000000000000051</string>
 			</array>
 			<key>isa</key>
 			<string>PBXSourcesBuildPhase</string>
@@ -139,6 +140,7 @@
 				<string>000000000000000000000040</string>
 				<string>000000000000000000000042</string>
 				<string>000000000000000000000044</string>
+				<string>000000000000000000000050</string>
 			</array>
 			<key>isa</key>
 			<string>PBXGroup</string>
@@ -196,7 +198,7 @@
 				<key>CODE_SIGN_STYLE</key>
 				<string>Automatic</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>6</string>
+				<string>7</string>
 				<key>GENERATE_INFOPLIST_FILE</key>
 				<string>YES</string>
 				<key>INFOPLIST_FILE</key>
@@ -245,7 +247,7 @@
 				<key>CODE_SIGN_STYLE</key>
 				<string>Automatic</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>6</string>
+				<string>7</string>
 				<key>GENERATE_INFOPLIST_FILE</key>
 				<string>YES</string>
 				<key>INFOPLIST_FILE</key>
@@ -450,6 +452,24 @@
 			<string>000000000000000000000044</string>
 			<key>isa</key>
 			<string>PBXBuildFile</string>
+		</dict>
+		<key>000000000000000000000050</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>App/ProjectPicker.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>000000000000000000000051</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>000000000000000000000050</string>
 		</dict>
 	</dict>
 	<key>rootObject</key>

@@ -4,7 +4,7 @@ import ProbeCore
 
 struct BuildAndInstallIntent: AppIntent {
     static var title: LocalizedStringResource = "Build & Install"
-    static var description = IntentDescription("Build the configured app on your Mac, download it, and install it using your network helpers.")
+    static var description = IntentDescription("Build the selected app on your Mac, download it, and install it using your network helpers.")
     static var openAppWhenRun = true
     @MainActor func perform() async throws -> some IntentResult {
         UserDefaults.standard.set(true, forKey: "requestedBuildInstall")
@@ -40,7 +40,7 @@ extension ProbeModel {
         startBuildInstall()
     }
     func startBuildInstall() {
-        guard !busy, flow == nil || flow?.phase == .done else { return }
+        guard !busy, !catalogLoading, flowIsIdle else { return }
         guard pairingReady, downloadReady, helpersReady else {
             liveStatus = "Complete the private preparation and network helper setup first."
             return
@@ -49,7 +49,12 @@ extension ProbeModel {
             liveStatus = "Turn Wi-Fi off in Settings before this cellular test."
             return
         }
+        guard let selection = projectCache.selection else {
+            liveStatus = "Select a project and scheme first."
+            return
+        }
         flow = BuildFlowState()
+        flow?.selection = selection
         handoff(.connect)
     }
     func handoff(_ phase: BuildFlowState.Phase) {
@@ -89,7 +94,15 @@ extension ProbeModel {
             return
         }
         switch current.phase {
-        case .connect: Task { await buildAndDownload() }
+        case .connect:
+            Task {
+                if current.purpose == "catalog" {
+                    await refreshProjects(afterConnecting: true)
+                    flow?.phase = .done
+                    liveStatus = "Mac connection helper completed."
+                    saveFlow()
+                } else { await buildAndDownload() }
+            }
         case .prepare: Task { await installDownloadedBuild() }
         case .restore:
             flow?.phase = .done
@@ -99,7 +112,7 @@ extension ProbeModel {
         }
     }
     func buildAndDownload() async {
-        guard !busy, let identifier = flow?.job else { return }
+        guard !busy, let identifier = flow?.job, let selection = flow?.selection else { return }
         busy = true
         flow?.phase = .building
         saveFlow()
@@ -109,7 +122,7 @@ extension ProbeModel {
             var job: BuildDownloader.Job?
             // Tailscale's action can finish before the route is ready. Reuse the same UUID.
             for attempt in 0..<6 {
-                do { job = try await BuildDownloader.job(id: identifier, submit: true); break }
+                do { job = try await BuildDownloader.job(id: identifier, submit: true, selection: selection); break }
                 catch {
                     if attempt == 5 { throw error }
                     liveStatus = "Waiting for the private Mac connection…"
@@ -120,10 +133,13 @@ extension ProbeModel {
             while job?.status == "building", Date() < deadline {
                 liveStatus = "Building and signing on your Mac… Keep this app open."
                 try await Task.sleep(for: .seconds(3))
-                job = try await BuildDownloader.job(id: identifier, submit: false)
+                job = try await BuildDownloader.job(id: identifier, submit: false, selection: selection)
             }
-            guard job?.status == "ready", let selected = job?.manifest else { throw DownloadIssue.invalidResponse }
-            candidate = try await BuildDownloader.download(candidate: selected) { [weak self] message in
+            guard let ready = job, ready.status == "ready", let selected = ready.manifest else {
+                if job?.status == "failed" { liveStatus = job?.message ?? "Build failed." }
+                throw DownloadIssue.invalidResponse
+            }
+            candidate = try await BuildDownloader.download(job: ready, selection: selection) { [weak self] message in
                 Task { @MainActor in self?.liveStatus = message }
             }
             flow?.artifactHash = selected.sha256
@@ -132,6 +148,7 @@ extension ProbeModel {
             handoff(.prepare)
         } catch {
             flow?.result = "Build or download failed; installation was not started. Check the Mac and retry."
+            if liveStatus.hasPrefix("Xcode ") || liveStatus.hasPrefix("Choose a scheme") { flow?.result = liveStatus }
             if let failure = error as? DownloadConnectionFailure {
                 reports.append("Build & Install connection: \(failure.diagnostic)")
             } else if case DownloadIssue.http(let status) = error {

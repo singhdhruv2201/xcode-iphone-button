@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Serve one signed build privately over HTTPS on a Tailscale IPv4 address.
+"""Serve signed builds and trusted project discovery privately over HTTPS.
 
-Artifact downloads and optional fixed-project build jobs; bearer authentication,
+Artifact downloads and selected-project or legacy build jobs; bearer authentication,
 no directory listing, no request logs.
 State (including keys, token and IPA) must live outside the repository.
 Requires the same Python environment as stage_phone_install.py.
@@ -32,7 +32,6 @@ def prepare(state: Path, app: Path, host: str, port: int):
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import ec
     from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
-    from pymobiledevice3.services.installation_proxy import create_ipa_contents_from_directory
     from stage_phone_install import signed_app
     address = tailnet_address(host)
     repo = Path(__file__).resolve().parent.parent
@@ -71,21 +70,32 @@ def prepare(state: Path, app: Path, host: str, port: int):
         settings = json.loads(settings_path.read_text())
         if settings["endpoint"] != f"https://{address}:{port}" or settings["targetBundleID"] != info["CFBundleIdentifier"]:
             raise ValueError("Existing private configuration belongs to another endpoint or app")
-    artifact = create_ipa_contents_from_directory(str(app))
-    if not 0 < len(artifact) <= 512 * 1024 * 1024:
-        raise ValueError("Artifact exceeds size limit")
-    digest = hashlib.sha256(artifact).hexdigest()
-    artifact_path = state / (digest + ".ipa")
-    artifact_path.write_bytes(artifact)
-    manifest = {"schema": 1, "displayName": info.get("CFBundleDisplayName", info["CFBundleName"]),
-                "bundleID": info["CFBundleIdentifier"], "buildVersion": info["CFBundleVersion"],
-                "byteCount": len(artifact), "sha256": digest}
+    manifest = package_artifact(state, app)
     temp = state / "manifest.tmp"
     temp.write_text(json.dumps(manifest))
     temp.replace(state / "manifest.json")
     for path in state.iterdir():
         if path.is_file(): path.chmod(0o600)
     return settings
+
+
+def package_artifact(state, app):
+    from pymobiledevice3.services.installation_proxy import create_ipa_contents_from_directory
+    from stage_phone_install import signed_app
+    info, _ = signed_app(app)
+    artifact = create_ipa_contents_from_directory(str(app))
+    if not 0 < len(artifact) <= 512 * 1024 * 1024:
+        raise ValueError("Artifact exceeds size limit")
+    digest = hashlib.sha256(artifact).hexdigest()
+    artifact_path = state / (digest + ".ipa")
+    temporary_artifact = artifact_path.with_suffix(".tmp")
+    temporary_artifact.write_bytes(artifact)
+    temporary_artifact.chmod(0o600)
+    temporary_artifact.replace(artifact_path)
+    manifest = {"schema": 1, "displayName": info.get("CFBundleDisplayName", info["CFBundleName"]),
+                "bundleID": info["CFBundleIdentifier"], "buildVersion": info["CFBundleVersion"],
+                "byteCount": len(artifact), "sha256": digest}
+    return manifest
 
 
 class BuildServer(http.server.ThreadingHTTPServer):
@@ -102,7 +112,7 @@ class BuildServer(http.server.ThreadingHTTPServer):
     def handle_error(self, *_): pass
 
 
-def handler_for(state: Path, token: str, jobs=None):
+def handler_for(state: Path, token: str, jobs=None, catalog=None):
     class Handler(http.server.BaseHTTPRequestHandler):
         server_version = "PrivateBuild"
         sys_version = ""
@@ -121,6 +131,7 @@ def handler_for(state: Path, token: str, jobs=None):
 
         def do_POST(self):
             from phone_build_jobs import JobConflict
+            from project_catalog import CatalogError
             if not hmac.compare_digest(self.headers.get("Authorization", "").encode(), ("Bearer " + token).encode()):
                 self.send_error(401)
                 return
@@ -129,11 +140,17 @@ def handler_for(state: Path, token: str, jobs=None):
                 return
             try:
                 length = int(self.headers.get("Content-Length", "0"))
-                if not 0 < length <= 128 or self.headers.get("Transfer-Encoding"):
+                if not 0 < length <= 2048 or self.headers.get("Transfer-Encoding"):
                     raise ValueError()
                 request = json.loads(self.rfile.read(length))
-                if set(request) != {"id"}: raise ValueError()
-                record = jobs.submit(request["id"])
+                if set(request) == {"id"}:
+                    record = jobs.submit(request["id"])
+                elif set(request) == {"id", "projectID", "scheme"} and catalog is not None:
+                    record = jobs.submit(request["id"], request["projectID"], request["scheme"])
+                else: raise ValueError()
+            except CatalogError:
+                self.send_error(404)
+                return
             except JobConflict:
                 self.send_error(409)
                 return
@@ -146,6 +163,24 @@ def handler_for(state: Path, token: str, jobs=None):
             auth = self.headers.get("Authorization", "")
             if not hmac.compare_digest(auth.encode(), ("Bearer " + token).encode()):
                 self.send_error(401)
+                return
+            if self.path == "/projects" or self.path.startswith("/projects/"):
+                from project_catalog import CatalogError
+                if catalog is None:
+                    self.send_error(404)
+                    return
+                try:
+                    if self.path == "/projects": value = catalog.refresh()
+                    elif self.path.endswith("/schemes"):
+                        value = catalog.schemes(self.path[len("/projects/"):-len("/schemes")])
+                    else:
+                        self.send_error(404)
+                        return
+                    self.json_response(value)
+                except CatalogError:
+                    self.send_error(422)
+                except Exception:
+                    self.send_error(503)
                 return
             if self.path.startswith("/jobs/") and jobs is not None:
                 try:
@@ -200,9 +235,12 @@ if __name__ == "__main__":
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
             context.minimum_version = ssl.TLSVersion.TLSv1_2
             context.load_cert_chain(args.state_dir / "server.pem", args.state_dir / "server.key")
-            from phone_build_jobs import BuildJobs, build_configured_app
-            jobs = BuildJobs(args.state_dir, lambda: build_configured_app(args.state_dir)) if (args.state_dir / "build-config.json").exists() else None
-            server = BuildServer((args.bind, args.port), handler_for(args.state_dir, config["token"], jobs))
+            from phone_build_jobs import BuildJobs, build_configured_app, build_selected_app
+            from project_catalog import configured_catalog
+            catalog = configured_catalog(args.state_dir)
+            jobs = BuildJobs(args.state_dir, lambda: build_configured_app(args.state_dir), catalog=catalog,
+                             selected_builder=lambda selection, identifier: build_selected_app(args.state_dir, catalog, selection, identifier)) if catalog or (args.state_dir / "build-config.json").exists() else None
+            server = BuildServer((args.bind, args.port), handler_for(args.state_dir, config["token"], jobs, catalog))
             server.tls_context = context
             print("Authenticated HTTPS server listening only on the selected Tailscale address.", flush=True)
             server.serve_forever()

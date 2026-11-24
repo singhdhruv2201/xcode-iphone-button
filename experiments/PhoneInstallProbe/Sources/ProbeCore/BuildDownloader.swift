@@ -86,7 +86,7 @@ final class PinnedDownload: NSObject, URLSessionDownloadDelegate, @unchecked Sen
     }
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {}
 
-    func fetch(path: String, body: Data? = nil) async throws -> URL {
+    func fetch(path: String, body: Data? = nil, requestTimeout: TimeInterval = 30) async throws -> URL {
         try settings.validate()
         guard let url = URL(string: settings.endpoint + path) else { throw DownloadIssue.invalidResponse }
         let config = URLSessionConfiguration.ephemeral
@@ -94,7 +94,7 @@ final class PinnedDownload: NSObject, URLSessionDownloadDelegate, @unchecked Sen
         config.httpCookieStorage = nil
         config.urlCredentialStorage = nil
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
-        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForRequest = requestTimeout
         config.timeoutIntervalForResource = 300
         config.waitsForConnectivity = false
         config.allowsCellularAccess = true
@@ -133,12 +133,31 @@ public enum BuildDownloader {
         public let status: String
         public let message: String
         public let manifest: InstallCandidate?
+        public let selection: Selection?
+        public struct Selection: Codable, Sendable {
+            public let projectID: String
+            public let scheme: String
+        }
+        public func validateSelection(_ expected: ProjectSelection?) throws {
+            if let expected {
+                try expected.validate()
+                guard selection?.projectID == expected.projectID, selection?.scheme == expected.scheme else {
+                    throw DownloadIssue.wrongApp
+                }
+            } else if selection != nil { throw DownloadIssue.wrongApp }
+        }
     }
 
-    public static func job(id: UUID, submit: Bool) async throws -> Job {
+    public static func job(id: UUID, submit: Bool, selection: ProjectSelection? = nil) async throws -> Job {
         let settings = try DownloadSettingsVault.load()
         let identifier = id.uuidString.lowercased()
-        let body = submit ? try JSONEncoder().encode(["id": identifier]) : nil
+        var request = ["id": identifier]
+        if let selection {
+            try selection.validate()
+            request["projectID"] = selection.projectID
+            request["scheme"] = selection.scheme
+        }
+        let body = submit ? try JSONEncoder().encode(request) : nil
         let file = try await PinnedDownload(settings: settings, limit: 16_384)
             .fetch(path: submit ? "/jobs" : "/jobs/" + identifier, body: body)
         defer { try? FileManager.default.removeItem(at: file) }
@@ -146,7 +165,16 @@ public enum BuildDownloader {
         guard job.id == identifier, ["building", "ready", "failed"].contains(job.status) else {
             throw DownloadIssue.invalidResponse
         }
+        try job.validateSelection(selection)
         return job
+    }
+
+    public static func download(job: Job, selection: ProjectSelection, progress: @escaping @Sendable (String) -> Void) async throws -> InstallCandidate {
+        try job.validateSelection(selection)
+        guard job.status == "ready", let candidate = job.manifest else { throw DownloadIssue.invalidResponse }
+        try candidate.validate()
+        return try await download(settings: DownloadSettingsVault.load(), destinationFolder: nil,
+                                  selected: candidate, approvedBundleID: candidate.bundleID, progress: progress)
     }
 
     public static func download(candidate: InstallCandidate, progress: @escaping @Sendable (String) -> Void) async throws -> InstallCandidate {
@@ -158,7 +186,7 @@ public enum BuildDownloader {
         return try await download(settings: settings, destinationFolder: nil, progress: progress)
     }
 
-    static func download(settings: DownloadSettings, destinationFolder: URL?, selected: InstallCandidate? = nil, progress: @escaping @Sendable (String) -> Void) async throws -> InstallCandidate {
+    static func download(settings: DownloadSettings, destinationFolder: URL?, selected: InstallCandidate? = nil, approvedBundleID: String? = nil, progress: @escaping @Sendable (String) -> Void) async throws -> InstallCandidate {
         progress("Private download settings: loaded")
         let candidate: InstallCandidate
         if let selected { candidate = selected }
@@ -168,7 +196,7 @@ public enum BuildDownloader {
             candidate = try JSONDecoder().decode(InstallCandidate.self, from: Data(contentsOf: manifestFile))
         }
         try candidate.validate()
-        guard candidate.bundleID == settings.targetBundleID else { throw DownloadIssue.wrongApp }
+        guard candidate.bundleID == (approvedBundleID ?? settings.targetBundleID) else { throw DownloadIssue.wrongApp }
         progress("Pinned HTTPS connection and authenticated manifest: accepted")
         let artifact = try await PinnedDownload(settings: settings, limit: Int64(candidate.byteCount))
             .fetch(path: "/artifacts/\(candidate.sha256).ipa")

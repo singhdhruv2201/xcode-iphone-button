@@ -45,3 +45,9 @@ jobs/
 *.crt
 *.der
 *.pub
+
+# Private project discovery and selection state
+catalog-config.json
+project-catalog.json
+build-versions.json
+project-selection.json

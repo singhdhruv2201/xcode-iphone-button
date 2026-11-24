@@ -4,16 +4,16 @@
 
 Never commit device names/identifiers, account names, personal paths, tailnet/LAN addresses, Mac hostnames, SSH configuration or keys, signing identities/team IDs, provisioning profiles, pairing records, bearer tokens, certificates/private keys, app artifacts, or signed Shortcut exports.
 
-For the one-tap flow, server state belongs outside **every Git checkout**, with directory mode 0700 and file mode 0600. The state includes `build-config.json`, `download-settings.json`, certificates, tokens, manifests, jobs and artifacts. Keep `Signing.local.xcconfig` ignored, or enter signing details through a private configuration. For the legacy SSH flow, device settings belong in the installed private configuration and SSH credentials belong in Shortcuts/SSH settings.
+For the one-tap flow, server state belongs outside **every Git checkout**, with directory mode 0700 and file mode 0600. The state includes `catalog-config.json`, `project-catalog.json`, `build-versions.json`, optional legacy `build-config.json`, `download-settings.json`, private compiler logs, certificates, tokens, manifests, jobs and artifacts. Keep `Signing.local.xcconfig` ignored, or enter signing details through a private configuration. For the legacy SSH flow, device settings belong in the installed private configuration and SSH credentials belong in Shortcuts/SSH settings.
 
 Generated helper workflows contain no personal endpoint or credential, but their signed containers may include signing identity metadata. Generate them locally; never force-add them. Build output, caches, logs and user-specific Xcode files can contain machine paths and signing/device details even when the source is clean.
 
 ## One-tap trust boundary
 
 - The Mac HTTPS server binds only to a canonical address within Tailscale's IPv4 range. It does not enable public forwarding or change firewall settings.
-- Every artifact/job request requires the private bearer token. Requests are not logged. No directory listing or key/settings download route exists.
-- The token grants the ability to build the **configured local project** and retrieve its artifacts. Treat it as a credential even inside a tailnet. Revoke/replace compromised settings and re-import them over trusted USB.
-- Job requests accept only a UUID, not a project path, command, scheme, or signing identity. Jobs are serialized and repeated UUIDs are idempotent. Build scripts in the configured Xcode project run with the Mac user's privileges; configure only projects you trust.
+- Every catalog/artifact/job request requires the private bearer token. Requests are not logged. No directory listing or key/settings download route exists.
+- The token grants the ability to build the **projects discovered under the configured trusted folders** and retrieve its artifacts. Treat it as a credential even inside a tailnet. Revoke/replace compromised settings and re-import them over trusted USB.
+- Selected job requests accept a UUID, opaque catalog project ID and scheme validated against Xcode’s scheme list. They do not accept absolute paths, commands, output locations or signing identities. Jobs are serialized; repeated UUIDs must retain the original selection. Project build scripts run with the Mac user’s privileges; configure only trusted scan roots. Discovery skips symbolic links, hidden/dependency/build folders and the installer checkout. The phone stores relative display paths and its selection privately, excluded from backup.
 - The phone requires the exact pinned TLS leaf certificate plus validity/IP checks, rejects redirects and non-approved endpoints, and verifies bundle identity, size and artifact hash before installation.
 - A scoped ATS exception permits private certificate evaluation within the tailnet address range. Application code still rejects HTTP and mismatched certificates; there is no global arbitrary-load exception.
 - Pairing and download settings use non-synchronizing Keychain items accessible only while the phone is unlocked on that device. Temporary USB imports are removed after loading. Pairing keys are not embedded in the app or exported reports.

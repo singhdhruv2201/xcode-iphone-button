@@ -21,6 +21,11 @@ final class DownloadTests: XCTestCase {
         let result = try await BuildDownloader.download(settings: settings, destinationFolder: folder, progress: { _ in })
         try result.verifyArtifact(at: folder.appendingPathComponent("application.ipa"))
         XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appendingPathComponent("manifest.json").path))
+        let catalogFile = try await PinnedDownload(settings: settings, limit: 512 * 1024).fetch(path: "/projects")
+        defer { try? FileManager.default.removeItem(at: catalogFile) }
+        let catalog = try JSONDecoder().decode(ProjectList.self, from: Data(contentsOf: catalogFile))
+        try catalog.validate()
+        XCTAssertFalse(catalog.projects.isEmpty)
         let denied = DownloadSettings(endpoint: settings.endpoint, token: String(repeating: "x", count: 43), certificateDER: settings.certificateDER, targetBundleID: settings.targetBundleID)
         do {
             _ = try await PinnedDownload(settings: denied, limit: 16_384).fetch(path: "/manifest.json")

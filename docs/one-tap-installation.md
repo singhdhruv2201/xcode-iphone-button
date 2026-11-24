@@ -14,7 +14,7 @@ python -m pip install 'pymobiledevice3==11.55.0'
 
 Install Tailscale on both devices, sign into your own tailnet, and connect. Install LocalDevVPN from its official App Store listing on the phone. Approve the system's VPN configuration prompts. Keep LocalDevVPN disconnected during USB preparation and use its default Device IP for one-tap installation.
 
-Build the target app normally in Xcode with working development signing. Ensure its project has a consistent integer `CURRENT_PROJECT_VERSION` and note its `.xcodeproj`, scheme, and device `.app` output path privately. The job helper changes the target's build number on every new job, preserving other project-file text. The target app must match the phone's provisioned device.
+Build the target app normally in Xcode with working development signing. Use a numeric `CURRENT_PROJECT_VERSION`. Note an existing signed device `.app` output path privately for the initial server bootstrap. The project picker resolves future selected build outputs automatically and overrides the build number on the command line without editing the project file. The target app must match the phone's provisioned device.
 
 ## 2. Generate helpers and build the installer
 
@@ -68,7 +68,19 @@ mkdir -p "$HOME/Library/Application Support/PhoneInstallProbeServer"
 chmod 700 "$HOME/Library/Application Support/PhoneInstallProbeServer"
 ```
 
-Create `build-config.json` inside that folder, replacing placeholders privately:
+Create `catalog-config.json` inside that folder, replacing placeholders privately:
+
+```json
+{
+  "roots": ["/absolute/path/to/trusted/development"],
+  "excludedPaths": []
+}
+```
+
+Set its mode to 600. Only add folders containing projects you trust to execute build scripts. The Mac scans for Xcode containers; `xcodebuild -list -json` discovers schemes for a selected container. See [picker behavior and limits](project-picker.md).
+
+Optionally retain `build-config.json` for older clients using the fixed-target API:
+
 
 ```json
 {
@@ -78,7 +90,7 @@ Create `build-config.json` inside that folder, replacing placeholders privately:
 }
 ```
 
-Set its mode to 600. Do not put it in the checkout. The current implementation supports an Xcode project with integer build numbers, not arbitrary workspaces or client-supplied build commands.
+Set this optional file’s mode to 600 too. Do not put either configuration in the checkout. New clients use the catalog and do not need this fixed-target file.
 
 Start the server using the same Python environment:
 
@@ -91,9 +103,9 @@ python tools/serve_phone_build.py \
 
 Replace the bind placeholder with the Mac's own Tailscale IPv4 address. The default port is 8765. Leave this process running. Approve legitimate macOS Automation access to Xcode for the process invoking the build, if prompted. Do not grant unrelated permissions or disable the firewall. Tailnet policy must allow the phone to reach this endpoint; no public port forwarding is needed.
 
-Startup verifies/packages the existing signed app and creates a private TLS certificate, key, bearer token, and allowed target identity. The existing settings are reused on restart. With `build-config.json` present, authenticated build-job endpoints are enabled. Without it, only prepared-artifact downloads are available.
+Startup verifies/packages the existing signed app and creates a private TLS certificate, key, bearer token, and allowed target identity. The existing settings are reused on restart. With `catalog-config.json` present, authenticated project discovery and selected-project build jobs are enabled. The startup app remains the legacy manual-download target; choosing another project does not require new credentials or USB preparation.
 
-A new job builds for **Any iOS Device (arm64)**, so the Mac does not need a live remote Xcode connection to the phone. It checks Xcode success, valid signing/profile, and the expected new build number before publishing. Inspect Xcode if a job fails. Do not run conflicting actions in the configured target workspace.
+A selected job builds Debug for **generic/platform=iOS** using `xcodebuild`, so the project need not be open in Xcode and the Mac does not need a live device connection. The helper validates signing, bundle identity and the expected new build number before publishing. If it fails, inspect the private `jobs/<UUID>.log` inside the state folder. Build output is kept in a private per-project DerivedData folder.
 
 ## 5. Import the private download connection
 
@@ -124,11 +136,11 @@ Run **Probe Restore Internet** once to handle first-run prompts and verify cellu
 ## 7. Run and verify
 
 1. Unplug USB. Turn Wi-Fi fully off in Settings. Keep the phone unlocked with Cellular Data and Tailscale on.
-2. Tap **Build & Install** once. Keep the app in the foreground and let Shortcuts return to it between phases.
+2. Tap **Connect & Refresh**, choose the project and its iPhone app scheme. Later, **Refresh** discovers newly created projects. Tap **Build & Install** once. Keep the app in the foreground and let Shortcuts return to it between phases.
 3. Observe the final installation result and restored internet.
 4. Open the target app manually and verify the updated behavior.
 
-For a Home Screen entry, create a Shortcut containing the probe's **Build & Install** App Intent and use Shortcuts' Add to Home Screen option. The in-app button already runs the full flow; this optional launcher adds no SSH configuration.
+For a Home Screen entry, create a Shortcut containing the probe's **Build & Install** App Intent and use Shortcuts' Add to Home Screen option. The in-app button already runs the full flow; this optional launcher uses the saved project selection and adds no SSH configuration.
 
 ## Recovery, renewal and restart
 

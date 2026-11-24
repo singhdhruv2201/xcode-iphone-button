@@ -9,6 +9,12 @@ struct PhoneInstallProbeApp: App {
 
 @MainActor
 final class ProbeModel: ObservableObject {
+    @Published var projectCache = ProjectCache.load()
+    @Published var catalogLoading = false
+    @Published var catalogMessage = ""
+    @Published var selectedProjectID = ""
+    @Published var availableSchemes: [String] = []
+    @Published var selectedScheme = ""
     @Published var flow: BuildFlowState?
     @Published var helpersReady = UserDefaults.standard.bool(forKey: "networkHelpersReady") {
         didSet { UserDefaults.standard.set(helpersReady, forKey: "networkHelpersReady") }
@@ -34,6 +40,9 @@ final class ProbeModel: ObservableObject {
             let status = path.status == .satisfied ? "Available" : "Not available"
             Task { @MainActor in self?.wifiPath = status }
         }
+        selectedProjectID = projectCache.selection?.projectID ?? ""
+        selectedScheme = projectCache.selection?.scheme ?? ""
+        if !selectedScheme.isEmpty { availableSchemes = [selectedScheme] }
         loadFlow()
         wifiMonitor.start(queue: DispatchQueue(label: "PhoneInstallProbe.wifi"))
     }
@@ -164,15 +173,19 @@ struct ProbeView: View {
     var body: some View {
         NavigationStack {
             Form {
+                ProjectPickerSection(model: model)
                 Section("Build & Install") {
-                    if let candidate = model.candidate { Text(candidate.displayName).font(.headline) }
+                    if let selection = model.projectCache.selection {
+                        Text(selection.projectName).font(.headline)
+                        Text(selection.scheme).font(.caption).foregroundStyle(.secondary)
+                    } else { Text("Select a project and scheme above.").foregroundStyle(.secondary) }
                     Button {
                         model.startBuildInstall()
                     } label: {
                         Label("Build & Install", systemImage: "hammer.fill").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(model.busy || !model.helpersReady || !model.pairingReady || !model.downloadReady || (model.flow != nil && model.flow?.phase != .done))
+                    .disabled(model.busy || model.catalogLoading || model.projectCache.selection == nil || !model.helpersReady || !model.pairingReady || !model.downloadReady || (model.flow != nil && model.flow?.phase != .done))
                     if model.busy { ProgressView() }
                     if !model.liveStatus.isEmpty { Text(model.liveStatus).font(.footnote) }
                     Text("Keep the Mac awake and this app open. For this test, unplug USB and turn Wi-Fi off. Shortcuts will briefly switch networks, then return here.").font(.caption)
@@ -274,7 +287,11 @@ struct ProbeView: View {
                 }
             }
             .navigationTitle("Phone Install Probe")
-            .task { model.refreshPairing(); model.consumeBuildRequest() }
+            .task {
+                model.refreshPairing()
+                model.consumeBuildRequest()
+                if model.downloadReady && model.flowIsIdle { await model.refreshProjects() }
+            }
             .onOpenURL { model.handleCallback($0) }
             .onReceive(NotificationCenter.default.publisher(for: .init("requestedBuildInstall"))) { _ in model.consumeBuildRequest() }
             .onChange(of: scenePhase) { _, phase in if phase == .active { model.refreshPairing(); model.consumeBuildRequest() } }

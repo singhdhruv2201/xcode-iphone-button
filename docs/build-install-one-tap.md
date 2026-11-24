@@ -15,11 +15,11 @@ The complete one-tap flow is now **user-confirmed on the physical phone**, start
 
 The phone's full final diagnostic report was not pasted for this run, so the install/launch outcome is user-confirmed; the Mac job completion is independently recorded. Earlier manual tests supplied exact bundle/build verification reports.
 
-The updated phone app compiles and is installed. Fourteen Swift tests and seven Python tests pass, including real pinned HTTPS download, invalid token/pin rejection, job idempotency, and stale callback rejection. Existing shell/AppleScript installation checks also pass. This verifies the tested device and setup, not every iOS/VPN version.
+The updated phone app compiles and is installed. Seventeen Swift tests and fourteen Python build/server/catalog tests pass, including real pinned HTTPS download, invalid token/pin rejection, job idempotency, and stale callback rejection. Existing shell/AppleScript installation checks also pass. This verifies the tested device and setup, not every iOS/VPN version. Build 7 adds the project picker. The user selected a project and scheme on the physical phone, unplugged USB with Wi-Fi off, and ran Build & Install. The Mac independently recorded the matching selected-project job and fresh signed artifact. The user confirmed successful installation, restored internet, and a working launch. Authenticated discovery, refresh and a separate selected-project Mac build also passed.
 
 ## One-time setup
 
-1. Keep the Mac's Tailscale connection and private build server running. The Mac must remain awake, with Xcode and the configured project available.
+1. Keep the Mac's Tailscale connection and private build server running. The Mac must remain awake, with Xcode installed and trusted project folders configured. Selected projects need not be open.
 2. Install the updated Phone Install Probe using the existing USB preparation tool. This retains the private Keychain pairing record and imports the Mac connection settings. It does not transfer the target app over USB.
 3. In Phone Install Probe, use the three **Add** buttons under **One-time Shortcut setup**. Open each file in Shortcuts and add it under its exact name.
 4. Run **Probe Restore Internet** once in Shortcuts and handle initial permission prompts. Confirm Cellular Data is on, LocalDevVPN is disconnected, and Tailscale connects.
@@ -29,12 +29,12 @@ The generated helpers contain no SSH credentials, Mac addresses, API tokens, or 
 
 ## Every build
 
-Unplug USB and turn Wi-Fi off in Settings for the cellular test. Keep the phone unlocked and Phone Install Probe open, then tap **Build & Install**.
+Unplug USB and turn Wi-Fi off in Settings for the cellular test. Keep the phone unlocked and Phone Install Probe open, select a project and iPhone app scheme using **Connect & Refresh**, then tap **Build & Install**.
 
 | Stage | What happens |
 | --- | --- |
 | Connect | Shortcut turns Cellular Data on, disables LocalDevVPN, and connects Tailscale. |
-| Build | The app requests one job on the Mac. Xcode builds and signs the locally configured project using a generic iOS destination. No remote phone connection is required. |
+| Build | The app requests one job on the Mac. Xcode builds and signs the selected catalog project/scheme using a generic iOS destination. No remote phone connection is required. |
 | Download | The app polls that job, downloads its exact artifact over pinned HTTPS, and verifies bundle identity, size, and SHA-256. |
 | Prepare | Shortcut disconnects Tailscale, enables LocalDevVPN, then turns Cellular Data off. |
 | Install | The app checks the local device service, authenticates with the private pairing record, installs the verified artifact, and checks the installed bundle/build. |
@@ -57,21 +57,20 @@ The app's **Build & Install** App Intent is available in Shortcuts and Siri. Aft
 
 Keep all server state **outside every Git checkout**. Existing `download-settings.json`, TLS key/certificate, signed artifacts, and pairing material remain private.
 
-Add a private `build-config.json` alongside the server settings:
+Add a private `catalog-config.json` alongside the server settings:
 
 ```json
 {
-  "project": "/absolute/path/to/Example.xcodeproj",
-  "scheme": "Example",
-  "app": "/absolute/path/to/Debug-iphoneos/Example.app"
+  "roots": ["/absolute/path/to/trusted/development"],
+  "excludedPaths": []
 }
 ```
 
-The current build helper supports an Xcode project with a consistent integer `CURRENT_PROJECT_VERSION` in its project file. Each new job increments that value, preserving unrelated edits. Review that local version change in the target repository. The artifact path must point to the scheme's device build output. This initial implementation builds this configured project, rather than following whichever Xcode window happens to be frontmost.
+See the [complete setup](one-tap-installation.md) and [project picker guide](project-picker.md) for discovery limits, schemes, workspace support and backward compatibility. Selected builds use Xcode’s CLI, resolve the signed output automatically, and pass a private reserved build number without rewriting the project.
 
-Run `tools/serve_phone_build.py` with the existing private state, target app path, Tailscale IPv4 bind address and port. Its Python environment needs `pymobiledevice3` and `cryptography`. The existing preparation documentation covers certificate pinning and phone setup. Keep the helper running for the test; no launch-at-login service is installed automatically.
+Run `tools/serve_phone_build.py` with the existing private state, initial signed app path, Tailscale IPv4 bind address and port. Keep the helper running; no launch-at-login service is installed automatically.
 
-The server accepts authenticated `POST /jobs` with only a canonical UUID, and authenticated `GET /jobs/<UUID>`. Clients cannot submit a project path, shell command, scheme, or signing identity. Jobs are serialized, repeated UUIDs reuse the same result, interrupted jobs fail closed on restart, and job count is capped at 1,000. Compiler logs stay in Xcode rather than being returned to the phone.
+Authenticated jobs bind a canonical UUID to a catalog project ID and validated scheme. Clients cannot submit absolute project paths, shell commands, output paths or signing identities. Jobs are serialized, duplicate UUIDs must retain their selection, interrupted jobs fail closed on restart, and job count is capped at 1,000. Compiler logs stay in the private state folder and are not served to the phone.
 
 Generate the three locally signed resources before building the app:
 

@@ -7,7 +7,7 @@ The one-tap flow has worked on a physical iPhone using a **free Personal Team**.
 ```text
 Build & Install
   → Shortcut: cellular ON, LocalDevVPN OFF, Tailscale ON
-  → Mac: Xcode builds and signs the configured project
+  → Mac: Xcode builds and signs the selected project
   → iPhone: downloads and verifies that job's exact artifact
   → Shortcut: Tailscale OFF, LocalDevVPN ON, cellular OFF
   → iPhone: authenticates locally, installs, verifies the build
@@ -20,7 +20,7 @@ The installation step is briefly **offline**. This is not continuous installatio
 
 | Workflow | Builds | Installs through | Setup |
 | --- | --- | --- | --- |
-| **One-tap Build & Install** | A fixed project and scheme configured privately on the Mac | Phone-side RemotePairing, AFC and Installation Proxy | [Complete setup](docs/one-tap-installation.md) |
+| **One-tap Build & Install** | A project/workspace and scheme selected on the phone | Phone-side RemotePairing, AFC and Installation Proxy | [Complete setup](docs/one-tap-installation.md) |
 | Original SSH button | The active Xcode workspace and selected scheme | Xcode's existing paired-device connection | [Original SSH guide](docs/ssh-xcode-button.md) |
 
 The new flow requires no SSH action or SSH credentials. The original shell/AppleScript bridge remains available. The GitHub repository retains its existing `xcode-iphone-button` name; your checkout folder may be named `remote-xcode-build`.
@@ -42,16 +42,16 @@ Follow the [complete installation guide](docs/one-tap-installation.md) for exact
 2. Generate the three signed Shortcut files with `tools/make_phone_shortcuts.py`. They are generated locally and excluded from Git.
 3. Build **PhoneInstallProbe** in Xcode using your private, ignored signing configuration, then install it once over USB.
 4. Establish a compatible RemotePairing record and use `tools/prepare_phone_probe.py` to transfer it privately to the app's device-only Keychain.
-5. Configure the target project, scheme, build output and private HTTPS server outside every Git checkout. Start the Mac helper.
+5. Configure trusted project scan folders and the private HTTPS server outside every Git checkout. Start the Mac helper; see the [project picker guide](docs/project-picker.md).
 6. Use `tools/prepare_phone_download.py` once to import the endpoint, bearer token and certificate pin over USB. No target artifact is sent over USB by this step.
 7. In the app, add **Probe Connect to Mac**, **Probe Prepare Installation**, and **Probe Restore Internet** using the three setup buttons. Keep their exact names. Run Restore Internet once and approve initial prompts.
-8. Enable **All three helpers are configured**. Unplug USB, turn Wi-Fi off in Settings, and tap **Build & Install**.
+8. Enable **All three helpers are configured**. Tap **Connect & Refresh**, choose a project and its iPhone app scheme. Unplug USB, turn Wi-Fi off in Settings, and tap **Build & Install**. The app remembers your selection; **Refresh** discovers new projects.
 
 Keep the phone unlocked and the app in the foreground. Shortcuts may appear briefly between phases. After installation, open the target app manually to verify its behavior. The app also exposes a **Build & Install** App Intent for an optional Home Screen Shortcut.
 
 ## How the one-tap flow works
 
-The Mac accepts an authenticated job UUID, builds only the locally configured project, increments its integer build number, and publishes a signed, content-addressed IPA. Duplicate requests reuse the same job; overlapping jobs are rejected. The phone cannot supply a shell command, project path, or signing identity.
+The Mac discovers Xcode projects/workspaces in privately configured folders. Xcode’s CLI resolves schemes, bundle identity and app output. An authenticated job binds a UUID to a catalog project ID and scheme. The Mac reserves a build number and passes it to Xcode without editing the project file, then publishes a signed, content-addressed IPA. Duplicate requests reuse the same selection and job; overlapping jobs are rejected. The phone cannot supply a shell command, absolute project path, output path or signing identity.
 
 The phone verifies the private HTTPS certificate, allowed bundle ID, file size and SHA-256 before entering offline mode. It then uses its stored RemotePairing identity to reach the phone's local installation service, upload through AFC, request installation, and verify the installed bundle/build.
 
@@ -63,10 +63,10 @@ See [development methodology and experiment results](docs/methodology.md), [arch
 
 - **Offline or interrupted:** run **Probe Restore Internet** directly in Shortcuts. If unavailable, turn Cellular Data on in Settings and disconnect LocalDevVPN manually.
 - **Mac unavailable:** keep it awake and its helper running. The helper is manually started; there is no automatic wake or launch-at-login service.
-- **Build error:** check Xcode's Report navigator. Compiler logs are not returned to the phone.
+- **Build error:** check the private `jobs/<UUID>.log` in the server state folder. Compiler logs are not returned to the phone.
 - **Provisioning expired:** rebuild/sign the installer and target with valid profiles. Automatic self-renewal of the installer is not implemented.
 - **Installation still waiting:** some native calls lack an overall cancellation deadline. Do not start a second installation. After an interruption, restore connectivity and inspect the target app before retrying.
-- **Project support:** the current job helper expects an `.xcodeproj`, a configured scheme/output path, and consistent integer `CURRENT_PROJECT_VERSION` entries. It updates those entries locally. Workspace selection, multiple target selection, automatic artifact discovery, and installer self-update are not implemented.
+- **Project support:** select an `.xcodeproj` or standalone `.xcworkspace` with a scheme that builds exactly one iPhone app. Debug signing must already work on the Mac, and `CURRENT_PROJECT_VERSION` must be numeric. Library/test-only or ambiguous schemes are rejected. Installer self-update is not implemented. Scan roots must contain only trusted projects because builds may execute their scripts.
 - **Resource limits:** artifacts are limited to 512 MiB; the Mac packages them in memory. Jobs are capped at 1,000 records and old artifacts accumulate. Clean private state only when no operation depends on it.
 
 ## Privacy
