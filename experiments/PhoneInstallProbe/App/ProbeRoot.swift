@@ -4,7 +4,6 @@ import SwiftUI
 struct ProbeView: View {
     enum Tab: Hashable { case build, projects, activity, settings }
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.colorScheme) private var colorScheme
     @StateObject private var model = ProbeModel()
     @AppStorage("probeAppearance") private var appearance = ProbeAppearance.system
     @AppStorage("iphoneGuidePresented") private var guidePresentedBefore = false
@@ -32,7 +31,7 @@ struct ProbeView: View {
                 ProbeSettings(model: model, appearance: $appearance, openSetup: presentGuide)
             }.tabItem { Label("Settings", systemImage: "gearshape.fill") }.tag(Tab.settings)
         }
-        .tint(ProbePalette.accent(appearance.scheme ?? colorScheme))
+        .tint(.blue)
         .preferredColorScheme(appearance.scheme)
         .task {
             model.refreshPairing()

@@ -3,46 +3,50 @@ import ProbeCore
 
 struct ProjectBrowser: View {
     @ObservedObject var model: ProbeModel
-    @Environment(\.colorScheme) private var scheme
     @State private var query = ""
     @State private var visibleProjects: [MacProject] = []
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12) {
-                ProbeHeading(title: "Projects")
-                Text("ON YOUR MAC").font(.system(.caption2, design: .monospaced)).tracking(2).foregroundStyle(.secondary)
+        List {
+            Section {
                 if model.projectCache.projects.isEmpty {
-                    ContentUnavailableView("Find your projects", systemImage: "folder.badge.plus", description: Text(model.downloadReady && model.helpersReady ? "Connect to your Mac to see projects in its configured folders." : "Complete the setup guide in Settings, then connect to see your Mac’s projects."))
+                    ContentUnavailableView("No Projects", systemImage: "folder", description: Text(model.downloadReady && model.helpersReady ? "Connect to your Mac to find projects in its configured folders." : "Complete the setup guide in Settings to connect to your Mac."))
                 } else if visibleProjects.isEmpty {
                     ContentUnavailableView.search(text: query)
                 }
                 ForEach(visibleProjects) { project in
                     NavigationLink(value: project.id) {
-                        ProbeCard {
-                            ProbeRow(title: project.name, detail: project.displayPath,
-                                     symbol: model.projectCache.selection?.projectID == project.id ? "checkmark.square.fill" : "folder.fill")
+                        Label {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(project.name)
+                                Text(project.displayPath).font(.footnote).foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: model.projectCache.selection?.projectID == project.id ? "checkmark.circle" : "folder")
+                                .foregroundStyle(.tint)
+                                .accessibilityLabel(model.projectCache.selection?.projectID == project.id ? "Selected project" : "Project")
                         }
-                    }.buttonStyle(ProbePressStyle()).disabled(!model.canChangeProject)
+                    }.disabled(!model.canChangeProject)
                 }
-                if model.catalogLoading { ProgressView("Loading from Xcode…").padding(.vertical) }
-                if !model.catalogMessage.isEmpty { Text(model.catalogMessage).font(.footnote).foregroundStyle(.secondary) }
+            } header: { Text("On Your Mac") } footer: {
+                Text("Choose a project, then its app scheme. Projects can stay closed on your Mac.")
+            }
+            Section {
+                if model.catalogLoading { ProgressView("Loading from Xcode…") }
+                if !model.catalogMessage.isEmpty { Text(model.catalogMessage).font(.subheadline).foregroundStyle(.secondary) }
                 Button("Connect & Refresh", systemImage: "network") { model.connectAndRefresh() }
-                    .buttonStyle(.borderedProminent).controlSize(.large)
                     .disabled(!model.canChangeProject || !model.helpersReady || !model.downloadReady)
-                Button("Refresh projects", systemImage: "arrow.clockwise") { Task { await model.refreshProjects() } }
-                    .buttonStyle(.bordered).controlSize(.large)
+                Button("Refresh Projects", systemImage: "arrow.clockwise") { Task { await model.refreshProjects() } }
                     .disabled(!model.canChangeProject || !model.downloadReady)
+            } footer: {
                 if let refreshed = model.projectCache.refreshed {
                     Text("Last refreshed \(refreshed.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.caption).foregroundStyle(.secondary)
                 }
-                Text("Projects can stay closed on your Mac. Refresh to discover new ones.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }.frame(maxWidth: 640).padding(22).frame(maxWidth: .infinity)
+            }
         }
-        .background(ProbePalette.canvas(scheme))
-        .navigationTitle("Projects").navigationBarTitleDisplayMode(.inline)
+        .listStyle(.insetGrouped)
+        .navigationTitle("Projects")
+        .navigationBarTitleDisplayMode(.large)
         .searchable(text: $query, prompt: "Find a project")
         .refreshable { await model.refreshProjects() }
         .onChange(of: query, initial: true) { filterProjects() }

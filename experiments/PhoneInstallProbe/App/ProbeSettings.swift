@@ -4,64 +4,41 @@ struct ProbeSettings: View {
     @ObservedObject var model: ProbeModel
     @Binding var appearance: ProbeAppearance
     let openSetup: () -> Void
-    @Environment(\.colorScheme) private var scheme
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                ProbeHeading(title: "Settings")
-                Text("SETUP").font(.system(.caption2, design: .monospaced)).tracking(2).foregroundStyle(.secondary)
-                Button(action: openSetup) {
-                    ProbeCard { ProbeRow(title: "Setup guide", detail: "Pick up where you left off", symbol: "book.closed.fill") }
-                }.buttonStyle(ProbePressStyle()).disabled(model.busy || !model.flowIsIdle)
-                NavigationLink {
-                    ProbeShortcutSettings(model: model)
-                } label: {
-                    ProbeCard { ProbeRow(title: "Shortcuts installer", detail: "Add or revisit the four Shortcuts", symbol: "square.3.layers.3d") }
-                }.buttonStyle(ProbePressStyle())
-                NavigationLink {
-                    ProbeConnectionSettings(model: model)
-                } label: {
-                    ProbeCard { ProbeRow(title: "Mac & pairing", detail: "Private preparation and connection check", symbol: "laptopcomputer.and.iphone") }
-                }.buttonStyle(ProbePressStyle())
-                ProbeCard {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Label("Appearance", systemImage: "circle.lefthalf.filled").font(.headline)
-                        Picker("Appearance", selection: $appearance) {
-                            ForEach(ProbeAppearance.allCases) { Text($0.title).tag($0) }
-                        }.pickerStyle(.segmented)
-                        Text("System follows your iPhone's appearance.").font(.footnote).foregroundStyle(.secondary)
-                    }
-                }
-                Text("TOOLS & RECOVERY").font(.system(.caption2, design: .monospaced)).tracking(2).foregroundStyle(.secondary).padding(.top, 8)
-                NavigationLink {
-                    ProbeDiagnostics(model: model)
-                } label: {
-                    ProbeCard { ProbeRow(title: "Diagnostics", detail: "Manual download, service and install tools", symbol: "slider.horizontal.3") }
-                }.buttonStyle(ProbePressStyle())
-                ProbeRecoveryCard(model: model)
-                Text("Development signing must stay valid for both this app and your builds. Renew expired profiles through Xcode.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }.frame(maxWidth: 640).padding(22).frame(maxWidth: .infinity)
-        }
-        .background(ProbePalette.canvas(scheme))
-        .navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .navigationBar)
-    }
-}
 
-struct ProbeRecoveryCard: View {
-    @ObservedObject var model: ProbeModel
     var body: some View {
-        ProbeCard {
-            VStack(alignment: .leading, spacing: 12) {
-                Label("Get back online", systemImage: "antenna.radiowaves.left.and.right").font(.headline)
-                Text("If a run stops offline, restore your connection before retrying.").font(.subheadline).foregroundStyle(.secondary)
-                Button("Restore Internet", systemImage: "arrow.clockwise") { model.restoreInternet() }
-                    .buttonStyle(.bordered).disabled(model.busy)
-                Text("If unavailable: turn Cellular Data on, disconnect LocalDevVPN, then reconnect Tailscale. Do not start a second installation while one is active.")
-                    .font(.footnote).foregroundStyle(.secondary)
+        Form {
+            Section("Setup") {
+                Button(action: openSetup) { Label("Setup Guide", systemImage: "book.closed") }
+                    .disabled(model.busy || !model.flowIsIdle)
+                NavigationLink { ProbeShortcutSettings(model: model) } label: {
+                    Label("Shortcuts Installer", systemImage: "square.3.layers.3d")
+                }
+                NavigationLink { ProbeConnectionSettings(model: model) } label: {
+                    Label("Mac & Pairing", systemImage: "laptopcomputer.and.iphone")
+                }
+            }
+            Section {
+                Picker(selection: $appearance) {
+                    ForEach(ProbeAppearance.allCases) { Text($0.title).tag($0) }
+                } label: { Label("Appearance", systemImage: "circle.lefthalf.filled") }
+                    .pickerStyle(.navigationLink)
+            } footer: { Text("System follows your iPhone’s appearance.") }
+            Section {
+                Button("Restore Internet", systemImage: "antenna.radiowaves.left.and.right") { model.restoreInternet() }
+                    .disabled(model.busy)
+            } header: { Text("Recovery") } footer: {
+                Text("If a run stops offline, restore your connection before retrying. You can also turn Cellular Data on, disconnect LocalDevVPN and reconnect Tailscale in Settings.")
+            }
+            Section {
+                NavigationLink { ProbeDiagnostics(model: model) } label: {
+                    Label("Diagnostics", systemImage: "stethoscope")
+                }
+            } header: { Text("Advanced") } footer: {
+                Text("Development signing must stay valid for this app and your builds. Renew expired profiles through Xcode.")
             }
         }
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.large)
     }
 }
 
