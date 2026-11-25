@@ -1,5 +1,7 @@
 # Build & Install from the iPhone
 
+**Current flow:** build 10 uses [one master Shortcut](master-shortcut.md) launched from the app button. The user confirmed installation, restored internet and fewer screen switches on the physical phone. The earlier three-handoff coordinator is described below as development history.
+
 The phone app now coordinates a Mac build, a private cellular download, an offline installation, and restoration of connectivity. It uses the existing free Personal Team signature and the phone's private pairing record.
 
 ## Current validation
@@ -17,6 +19,8 @@ The phone's full final diagnostic report was not pasted for this run, so the ins
 
 The updated phone app compiles and is installed. Seventeen Swift tests and fourteen Python build/server/catalog tests pass, including real pinned HTTPS download, invalid token/pin rejection, job idempotency, and stale callback rejection. Existing shell/AppleScript installation checks also pass. This verifies the tested device and setup, not every iOS/VPN version. Build 7 adds the project picker. The user selected a project and scheme on the physical phone, unplugged USB with Wi-Fi off, and ran Build & Install. The Mac independently recorded the matching selected-project job and fresh signed artifact. The user confirmed successful installation, restored internet, and a working launch. Authenticated discovery, refresh and a separate selected-project Mac build also passed.
 
+Build 9 reduces interruptions: the user confirmed suppression of the Tailscale Connect completion prompt, then supplied a phone report showing a 0.2-second authenticated preflight, skipped Connect helper and exact installed-build verification. Preparation/restoration still use Shortcuts.
+
 ## One-time setup
 
 1. Keep the Mac's Tailscale connection and private build server running. The Mac must remain awake, with Xcode installed and trusted project folders configured. Selected projects need not be open.
@@ -33,14 +37,14 @@ Unplug USB and turn Wi-Fi off in Settings for the cellular test. Keep the phone 
 
 | Stage | What happens |
 | --- | --- |
-| Connect | Shortcut turns Cellular Data on, disables LocalDevVPN, and connects Tailscale. |
+| Connect | A eight-second pinned HTTPS preflight checks the existing Mac connection. If it succeeds, the app starts the build directly. Otherwise, the helper turns Cellular Data on, disables LocalDevVPN, and connects Tailscale. |
 | Build | The app requests one job on the Mac. Xcode builds and signs the selected catalog project/scheme using a generic iOS destination. No remote phone connection is required. |
 | Download | The app polls that job, downloads its exact artifact over pinned HTTPS, and verifies bundle identity, size, and SHA-256. |
 | Prepare | Shortcut disconnects Tailscale, enables LocalDevVPN, then turns Cellular Data off. |
 | Install | The app checks the local device service, authenticates with the private pairing record, installs the verified artifact, and checks the installed bundle/build. |
 | Restore | Shortcut turns Cellular Data on first, disables LocalDevVPN, and reconnects Tailscale. The app reports the installation result. |
 
-Shortcuts may appear briefly. Apple's completion callback returns to the app after the helper finishes; launching Shortcuts alone is never treated as completion. Callbacks must match the stored job, phase, and random nonce, and are consumed once. The app also checks actual Mac/device connectivity before proceeding.
+Shortcuts still appear for required helper handoffs. Disabling **Show When Run** on provider actions suppresses their completion dialogs; it does not hide the Shortcuts app itself. See [reducing interruptions](quieter-shortcuts.md). Apple's completion callback returns to the app after the helper finishes; launching Shortcuts alone is never treated as completion. Callbacks must match the stored job, phase, and random nonce, and are consumed once. The app also checks actual Mac/device connectivity before proceeding.
 
 The app's **Build & Install** App Intent is available in Shortcuts and Siri. After setup, an optional Home Screen Shortcut can run that action. The in-app button follows the same flow.
 

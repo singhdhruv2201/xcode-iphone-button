@@ -117,6 +117,12 @@ The bearer token still authorizes building discovered trusted projects, whose ow
 
 The publication check reviews the exact staged files and all reachable Git history for known private values and common credential/device/path patterns, including author/committer metadata. Only synthetic fixture addresses and public dependency/license data are allowed. Generated signed Shortcut containers are intentionally omitted even though their workflow payload is credential-free.
 
+## Single master Shortcut
+
+Build 10 moves sequencing from repeated callback URL launches into **Probe Build & Install**, started by the app button. The master polls the Mac through a short non-opening app intent, calls foreground download/install actions when needed, and performs network restoration outside success-only branches. It binds every action to the run token, selected project and expected phase, and rejects repeated native installation attempts. See [the master guide](master-shortcut.md).
+
+The updated probe was installed over Xcode’s paired Wi-Fi connection, preserving private preparation. The user confirmed successful import, installation, restored internet and fewer screen switches. Mac job completion was independently recorded. Cancellation and provider/system failures can still require standalone recovery; first-use action permissions and the initial Shortcuts launch remain.
+
 ## Current constraints and deferred work
 
 - Only the tested phone/setup is verified; future iOS and provider behavior can differ.

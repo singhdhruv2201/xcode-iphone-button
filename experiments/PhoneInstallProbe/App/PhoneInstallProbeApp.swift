@@ -16,6 +16,9 @@ final class ProbeModel: ObservableObject {
     @Published var availableSchemes: [String] = []
     @Published var selectedScheme = ""
     @Published var flow: BuildFlowState?
+    @Published var masterReady = UserDefaults.standard.bool(forKey: "masterShortcutReady") {
+        didSet { UserDefaults.standard.set(masterReady, forKey: "masterShortcutReady") }
+    }
     @Published var helpersReady = UserDefaults.standard.bool(forKey: "networkHelpersReady") {
         didSet { UserDefaults.standard.set(helpersReady, forKey: "networkHelpersReady") }
     }
@@ -73,13 +76,24 @@ final class ProbeModel: ObservableObject {
         }
     }
 
+    func diagnoseMacConnection() async {
+        guard !busy, !catalogLoading, flowIsIdle else { return }
+        busy = true
+        liveStatus = "Checking the private Mac connection…"
+        defer { busy = false }
+        let check = await BuildDownloader.checkMacConnection()
+        liveStatus = check.diagnostic
+        reports.append(check.diagnostic)
+        UserDefaults.standard.set(reports, forKey: "sanitizedReports")
+    }
+
     func refreshSource() {
         let marker = try? String(contentsOf: InstallCandidate.folder().appendingPathComponent("source.txt"), encoding: .utf8)
         artifactSource = marker == "private-download" ? "Downloaded from Mac over private HTTPS" : "Staged locally"
     }
 
     func downloadBuild(stage: String) async {
-        guard !busy else { return }
+        guard !busy, flowIsIdle else { return }
         busy = true
         defer { busy = false }
         let before = wifiPath
@@ -118,7 +132,7 @@ final class ProbeModel: ObservableObject {
     }
 
     func authenticate(host: String, stage: String, install: Bool = false) async {
-        guard !busy else { return }
+        guard !busy, flowIsIdle else { return }
         busy = true
         liveStatus = "Starting authenticated test…"
         defer { busy = false }
@@ -144,7 +158,7 @@ final class ProbeModel: ObservableObject {
     }
 
     func run(host: String, stage: String) async {
-        guard !busy else { return }
+        guard !busy, flowIsIdle else { return }
         busy = true
         defer { busy = false }
         let before = wifiPath
@@ -185,15 +199,22 @@ struct ProbeView: View {
                         Label("Build & Install", systemImage: "hammer.fill").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(model.busy || model.catalogLoading || model.projectCache.selection == nil || !model.helpersReady || !model.pairingReady || !model.downloadReady || (model.flow != nil && model.flow?.phase != .done))
+                    .disabled(model.busy || model.catalogLoading || model.projectCache.selection == nil || !model.masterReady || !model.helpersReady || !model.pairingReady || !model.downloadReady || (model.flow != nil && model.flow?.phase != .done))
                     if model.busy { ProgressView() }
                     if !model.liveStatus.isEmpty { Text(model.liveStatus).font(.footnote) }
-                    Text("Keep the Mac awake and this app open. For this test, unplug USB and turn Wi-Fi off. Shortcuts will briefly switch networks, then return here.").font(.caption)
+                    Text("Keep the Mac awake and the phone unlocked. Unplug USB and turn Wi-Fi off. One master Shortcut runs the sequence and calls this app for download and installation.").font(.caption)
                     Button("Restore Internet", systemImage: "antenna.radiowaves.left.and.right") { model.restoreInternet() }
                         .disabled(model.busy)
                     Text("If the app stops while offline, turn Cellular Data on in Settings and disconnect LocalDevVPN. Restore Internet is also available as a standalone Shortcut.").font(.caption).foregroundStyle(.secondary)
                 }
-                Section("One-time Shortcut setup") {
+                Section("Master Shortcut setup") {
+                    if let url = Bundle.main.url(forResource: "Probe Build & Install", withExtension: "shortcut") {
+                        ShareLink(item: url) { Label("Add Probe Build & Install", systemImage: "square.and.arrow.up") }
+                    }
+                    Text("Add the master Shortcut once and keep its exact name. Start builds using the button above so your selected project is securely linked to the run.").font(.caption)
+                    Toggle("Master Shortcut is configured", isOn: $model.masterReady)
+                }.disabled(model.busy)
+                Section("Connection and recovery helpers") {
                     ForEach(["Probe Connect to Mac", "Probe Prepare Installation", "Probe Restore Internet"], id: \.self) { name in
                         if let url = Bundle.main.url(forResource: name, withExtension: "shortcut") {
                             ShareLink(item: url) { Label("Add " + name, systemImage: "square.and.arrow.up") }
@@ -209,6 +230,8 @@ struct ProbeView: View {
                 }
                 Section("Download from Mac · v6") {
                     Text(model.downloadStatus).font(.footnote)
+                    Button("Check private Mac connection") { Task { await model.diagnoseMacConnection() } }
+                        .disabled(model.busy || model.catalogLoading || !model.flowIsIdle || !model.downloadReady)
                     Button("Download latest build") {
                         Task { await model.downloadBuild(stage: stage) }
                     }
@@ -293,8 +316,9 @@ struct ProbeView: View {
                 if model.downloadReady && model.flowIsIdle { await model.refreshProjects() }
             }
             .onOpenURL { model.handleCallback($0) }
+            .onReceive(NotificationCenter.default.publisher(for: .init("masterFlowChanged"))) { _ in model.syncMasterFlow() }
             .onReceive(NotificationCenter.default.publisher(for: .init("requestedBuildInstall"))) { _ in model.consumeBuildRequest() }
-            .onChange(of: scenePhase) { _, phase in if phase == .active { model.refreshPairing(); model.consumeBuildRequest() } }
+            .onChange(of: scenePhase) { _, phase in if phase == .active { model.syncMasterFlow(); model.refreshPairing(); model.consumeBuildRequest() } }
         }
     }
 }

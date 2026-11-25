@@ -16,6 +16,8 @@ final class DownloadTests: XCTestCase {
             throw XCTSkip("Private local server is not configured")
         }
         let settings = try JSONDecoder().decode(DownloadSettings.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
+        let reachable = await BuildDownloader.macIsReachable(settings: settings)
+        XCTAssertTrue(reachable)
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: folder) }
         let result = try await BuildDownloader.download(settings: settings, destinationFolder: folder, progress: { _ in })
@@ -27,6 +29,8 @@ final class DownloadTests: XCTestCase {
         try catalog.validate()
         XCTAssertFalse(catalog.projects.isEmpty)
         let denied = DownloadSettings(endpoint: settings.endpoint, token: String(repeating: "x", count: 43), certificateDER: settings.certificateDER, targetBundleID: settings.targetBundleID)
+        let unauthorizedReachable = await BuildDownloader.macIsReachable(settings: denied)
+        XCTAssertFalse(unauthorizedReachable)
         do {
             _ = try await PinnedDownload(settings: denied, limit: 16_384).fetch(path: "/manifest.json")
             XCTFail("Incorrect token must be rejected")
@@ -36,6 +40,8 @@ final class DownloadTests: XCTestCase {
         var wrongCertificate = try XCTUnwrap(Data(base64Encoded: settings.certificateDER))
         wrongCertificate[wrongCertificate.count - 1] ^= 1
         let untrusted = DownloadSettings(endpoint: settings.endpoint, token: settings.token, certificateDER: wrongCertificate.base64EncodedString(), targetBundleID: settings.targetBundleID)
+        let untrustedReachable = await BuildDownloader.macIsReachable(settings: untrusted)
+        XCTAssertFalse(untrustedReachable)
         do {
             _ = try await PinnedDownload(settings: untrusted, limit: 16_384).fetch(path: "/manifest.json")
             XCTFail("A different certificate must never be accepted")

@@ -82,6 +82,7 @@
 				<string>000000000000000000000004</string>
 				<string>000000000000000000000031</string>
 				<string>000000000000000000000051</string>
+				<string>000000000000000000000061</string>
 			</array>
 			<key>isa</key>
 			<string>PBXSourcesBuildPhase</string>
@@ -110,6 +111,7 @@
 				<string>000000000000000000000041</string>
 				<string>000000000000000000000043</string>
 				<string>000000000000000000000045</string>
+				<string>000000000000000000000063</string>
 			</array>
 			<key>isa</key>
 			<string>PBXResourcesBuildPhase</string>
@@ -141,6 +143,8 @@
 				<string>000000000000000000000042</string>
 				<string>000000000000000000000044</string>
 				<string>000000000000000000000050</string>
+				<string>000000000000000000000060</string>
+				<string>000000000000000000000062</string>
 			</array>
 			<key>isa</key>
 			<string>PBXGroup</string>
@@ -198,7 +202,7 @@
 				<key>CODE_SIGN_STYLE</key>
 				<string>Automatic</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>7</string>
+				<string>10</string>
 				<key>GENERATE_INFOPLIST_FILE</key>
 				<string>YES</string>
 				<key>INFOPLIST_FILE</key>
@@ -247,7 +251,7 @@
 				<key>CODE_SIGN_STYLE</key>
 				<string>Automatic</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>7</string>
+				<string>10</string>
 				<key>GENERATE_INFOPLIST_FILE</key>
 				<string>YES</string>
 				<key>INFOPLIST_FILE</key>
@@ -470,6 +474,42 @@
 			<string>PBXBuildFile</string>
 			<key>fileRef</key>
 			<string>000000000000000000000050</string>
+		</dict>
+		<key>000000000000000000000060</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>App/MasterShortcut.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>000000000000000000000061</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>000000000000000000000060</string>
+		</dict>
+		<key>000000000000000000000062</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>file</string>
+			<key>path</key>
+			<string>App/Shortcuts/Probe Build &amp; Install.shortcut</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>000000000000000000000063</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>000000000000000000000062</string>
 		</dict>
 	</dict>
 	<key>rootObject</key>

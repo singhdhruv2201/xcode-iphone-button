@@ -18,14 +18,6 @@ Build the target app normally in Xcode with working development signing. Use a n
 
 ## 2. Generate helpers and build the installer
 
-Before building the probe from a fresh checkout, generate its three required bundle resources:
-
-```sh
-python tools/make_phone_shortcuts.py --output experiments/PhoneInstallProbe/App/Shortcuts
-```
-
-Apple's `shortcuts sign` validates/signs these credential-free workflows. Generated `.shortcut` files are ignored because signed containers can include identity metadata. Do not force-add them to Git.
-
 Create `experiments/PhoneInstallProbe/Signing.local.xcconfig` locally:
 
 ```xcconfig
@@ -33,7 +25,17 @@ DEVELOPMENT_TEAM = YOUR_PRIVATE_TEAM_ID
 PROBE_BUNDLE_ID = your.unique.PhoneInstallProbe
 ```
 
-This file is ignored. Do not enter personal signing values directly into the tracked project. Open `experiments/PhoneInstallProbe/PhoneInstallProbe.xcodeproj`, select **PhoneInstallProbe**, choose the trusted physical iPhone, and build/run once over USB. Resolve any Developer Mode, trust, or provisioning prompts. The pinned framework is a large download, so first package resolution may take time.
+This file is ignored. Do not enter personal signing values directly into the tracked project. Configure it before generating the master so its App Intent actions use the actual probe bundle ID.
+
+After creating the private signing configuration above, generate all four required bundle resources (master plus three helpers):
+
+```sh
+python tools/make_phone_shortcuts.py --output experiments/PhoneInstallProbe/App/Shortcuts
+```
+
+Apple's `shortcuts sign` validates/signs these credential-free workflows. Generated `.shortcut` files are ignored because signed containers can include identity metadata. Do not force-add them to Git.
+
+Open `experiments/PhoneInstallProbe/PhoneInstallProbe.xcodeproj`, select **PhoneInstallProbe**, choose the trusted physical iPhone, and build/run once over USB. Resolve any Developer Mode, trust, or provisioning prompts. The pinned framework is a large download, so first package resolution may take time.
 
 If the probe installs but waits for the debugger, stop that debug session and open it from the phone's Home Screen. Use a physical phone for transport/install validation; simulator results are not sufficient.
 
@@ -123,7 +125,7 @@ If endpoint, certificate or allowed target changes later, prepare the connection
 
 ## 6. Add the network helpers
 
-In **One-time Shortcut setup**, use the three Add buttons and choose Shortcuts to import each signed file. Preserve these exact names:
+In **Connection and recovery helpers**, use the three Add buttons and choose Shortcuts to import each signed file. Preserve these exact names:
 
 | Shortcut | Actions, in order |
 | --- | --- |
@@ -131,12 +133,16 @@ In **One-time Shortcut setup**, use the three Add buttons and choose Shortcuts t
 | Probe Prepare Installation | Tailscale Disconnect → LocalDevVPN Enable → Cellular Data OFF |
 | Probe Restore Internet | Cellular Data ON → LocalDevVPN Disable → Tailscale Connect |
 
-Run **Probe Restore Internet** once to handle first-run prompts and verify cellular/Tailscale connectivity. If an action is unavailable, inspect its provider app and imported action; the generated helpers target the provider App Intents, not a personal VPN configuration UUID. Do not replace explicit operations with Toggle. Then enable **All three helpers are configured** in the probe.
+Run **Probe Restore Internet** once to handle first-run prompts and verify cellular/Tailscale connectivity. If an action is unavailable, inspect its provider app and imported action; the generated helpers target the provider App Intents, not a personal VPN configuration UUID. Do not replace explicit operations with Toggle. Then enable **All three helpers are configured** in the probe. Generated provider actions have **Show When Run** off. For helpers imported earlier, edit their Tailscale Connect/Disconnect actions and turn **Show When Run** off to suppress completion dialogs; keep first-use system permissions enabled.
 
-## 7. Run and verify
+## 7. Add the master Shortcut
+
+In **Master Shortcut setup**, add **Probe Build & Install** and enable **Master Shortcut is configured**. Start it from the app’s Build & Install button, which supplies its run token and saved project selection. Keep Restore Internet available independently. See the [master guide](master-shortcut.md) for action behavior, cancellation recovery and current test evidence.
+
+## 8. Run and verify
 
 1. Unplug USB. Turn Wi-Fi fully off in Settings. Keep the phone unlocked with Cellular Data and Tailscale on.
-2. Tap **Connect & Refresh**, choose the project and its iPhone app scheme. Later, **Refresh** discovers newly created projects. Tap **Build & Install** once. Keep the app in the foreground and let Shortcuts return to it between phases.
+2. Tap **Connect & Refresh**, choose the project and its iPhone app scheme. Later, **Refresh** discovers newly created projects. Tap **Build & Install** once. Build 10 launches the master once; its app actions handle polling, download and installation, and the master performs network changes. Keep the phone unlocked and let the master run; it brings the app forward when needed.
 3. Observe the final installation result and restored internet.
 4. Open the target app manually and verify the updated behavior.
 

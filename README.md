@@ -5,13 +5,13 @@
 The one-tap flow has worked on a physical iPhone using a **free Personal Team**. The tester confirmed installation, restored internet, and successful launch of the updated app. This is an experimental development tool; provisioning limits and expiry still apply.
 
 ```text
-Build & Install
-  → Shortcut: cellular ON, LocalDevVPN OFF, Tailscale ON
-  → Mac: Xcode builds and signs the selected project
-  → iPhone: downloads and verifies that job's exact artifact
-  → Shortcut: Tailscale OFF, LocalDevVPN ON, cellular OFF
-  → iPhone: authenticates locally, installs, verifies the build
-  → Shortcut: cellular ON, LocalDevVPN OFF, Tailscale ON
+App: Build & Install
+  → Opens one master Shortcut
+  → Master connects Tailscale and polls the selected Mac build
+  → App action downloads and verifies that job's exact artifact
+  → Master switches to LocalDevVPN with cellular OFF
+  → App action authenticates locally, installs and verifies
+  → Master restores cellular/Tailscale and returns the result
 ```
 
 The installation step is briefly **offline**. This is not continuous installation over a cellular device tunnel: Tailscale carries the build request/download, and LocalDevVPN provides the phone's local development-service connection afterward. One-time USB preparation is required; routine target updates do not need USB or a preceding Wi-Fi session.
@@ -39,15 +39,29 @@ The new flow requires no SSH action or SSH credentials. The original shell/Apple
 Follow the [complete installation guide](docs/one-tap-installation.md) for exact commands and private configuration. The main steps are:
 
 1. Clone/download the repository. Create a private Python environment outside the checkout.
-2. Generate the three signed Shortcut files with `tools/make_phone_shortcuts.py`. They are generated locally and excluded from Git.
+2. Create the private, ignored `experiments/PhoneInstallProbe/Signing.local.xcconfig` with your signing team and probe bundle ID, as shown in the complete guide. Then run `python3 tools/make_phone_shortcuts.py --output experiments/PhoneInstallProbe/App/Shortcuts` to generate four signed Shortcuts: the master plus three connection/recovery helpers. They are generated locally and excluded from Git. Configure signing first so the master actions target your actual installed probe.
 3. Build **PhoneInstallProbe** in Xcode using your private, ignored signing configuration, then install it once over USB.
 4. Establish a compatible RemotePairing record and use `tools/prepare_phone_probe.py` to transfer it privately to the app's device-only Keychain.
 5. Configure trusted project scan folders and the private HTTPS server outside every Git checkout. Start the Mac helper; see the [project picker guide](docs/project-picker.md).
 6. Use `tools/prepare_phone_download.py` once to import the endpoint, bearer token and certificate pin over USB. No target artifact is sent over USB by this step.
-7. In the app, add **Probe Connect to Mac**, **Probe Prepare Installation**, and **Probe Restore Internet** using the three setup buttons. Keep their exact names. Run Restore Internet once and approve initial prompts.
-8. Enable **All three helpers are configured**. Tap **Connect & Refresh**, choose a project and its iPhone app scheme. Unplug USB, turn Wi-Fi off in Settings, and tap **Build & Install**. The app remembers your selection; **Refresh** discovers new projects.
+7. In the app, add **Probe Connect to Mac**, **Probe Prepare Installation**, and **Probe Restore Internet** using the three setup buttons. Keep their exact names. Run Restore Internet once, approve initial prompts, and enable **All three helpers are configured**.
+8. Add **Probe Build & Install** from **Master Shortcut setup** and enable its configured toggle. Keep the recovery helpers. Tap **Connect & Refresh**, choose a project and its iPhone app scheme. Unplug USB, turn Wi-Fi off in Settings, and tap **Build & Install**. The app remembers your selection; **Refresh** discovers new projects.
 
-Keep the phone unlocked and the app in the foreground. Shortcuts may appear briefly between phases. After installation, open the target app manually to verify its behavior. The app also exposes a **Build & Install** App Intent for an optional Home Screen Shortcut.
+Keep the phone unlocked and let the master run; it brings the app forward for download and installation. The latest app uses one master Shortcut launched from its button; no Action button or Control Center setup is required. Provider actions have **Show When Run** off. See [master Shortcut setup and validation](docs/master-shortcut.md). The earlier coordinator’s [connection preflight](docs/quieter-shortcuts.md) remains documented as a previous improvement. After installation, open the target app manually to verify its behavior. The app also exposes a **Build & Install** App Intent for an optional Home Screen Shortcut.
+
+## Upgrade an existing installation to the master Shortcut
+
+Your existing pairing and Mac connection settings are reused.
+
+1. Keep your private `Signing.local.xcconfig`, then regenerate the four local Shortcut resources with the command above. Regenerate them again if you change the probe bundle ID.
+2. Build/install the updated probe. Xcode can update an already paired iPhone over Wi-Fi; a cable is not required for that update.
+3. In the app, open **Master Shortcut setup**, tap **Add Probe Build & Install**, choose Shortcuts, and add or replace it without renaming it. Enable **Master Shortcut is configured**.
+4. Keep **Probe Restore Internet** available independently. Installing an app update does not replace previously imported Shortcuts; reimport the master when its generated actions change.
+5. Select a project and scheme, then start with **Build & Install inside the app**. Do not run the master directly from its Shortcuts tile: the app supplies a fresh run token for the selected project.
+
+The app opens Shortcuts once to start the master. The master calls the app when needed and performs the network changes itself. The tested flow installs successfully, restores internet and reduces screen switches; it does not eliminate every system screen or first-use permission prompt. Provider actions have **Show When Run** off to suppress completion dialogs.
+
+If the master is cancelled or stops before restoration, run **Probe Restore Internet** or turn Cellular Data on and disconnect LocalDevVPN manually. See the [master guide](docs/master-shortcut.md) for the sequence and failure behavior.
 
 ## How the one-tap flow works
 
@@ -55,7 +69,7 @@ The Mac discovers Xcode projects/workspaces in privately configured folders. Xco
 
 The phone verifies the private HTTPS certificate, allowed bundle ID, file size and SHA-256 before entering offline mode. It then uses its stored RemotePairing identity to reach the phone's local installation service, upload through AFC, request installation, and verify the installed bundle/build.
 
-The app saves its phase and job ID. Every Shortcut completion must match a random handoff nonce and phase before work continues. Opening Shortcuts alone is not success. A local service check precedes authenticated installation; interrupted native work is not silently replayed.
+The app saves its phase, job ID and selected project. The master’s app actions require a fresh run token and the expected phase. Callback URLs remain bound to their original run. Opening Shortcuts alone is not success. A local service check precedes authenticated installation; interrupted native work is not silently replayed.
 
 See [development methodology and experiment results](docs/methodology.md), [architecture, setup behavior, and recovery](docs/build-install-one-tap.md), [the phone-side investigation](docs/phone-side-installer-investigation.md), and [the earlier Mac-to-phone tunnel experiments](docs/remote-install-cellular-investigation.md).
 
@@ -87,7 +101,7 @@ swift test --package-path experiments/PhoneInstallProbe
 
 The Swift suite includes an optional live HTTPS test, skipped unless `PHONE_PROBE_DOWNLOAD_TEST_CONFIG` points to a private configuration file outside Git. Never configure public CI with personal pairing/signing/server credentials.
 
-The one-tap implementation passed a physical-device build, 14 Swift tests (including live HTTPS), 7 build/server tests, and the original script checks before the successful device run. CI tests protocol/state validation and synthetic server/installer behavior; it cannot prove hardware installation or VPN switching. Detailed results distinguish captured reports, independently observed Mac jobs, and user-confirmed phone outcomes.
+The master update passed a physical-device build, 18 Swift tests (including live HTTPS), and three generated-workflow simulations covering success and failure paths. The user confirmed the wireless app update and a master run with successful installation, restored internet and fewer screen switches. CI tests protocol/state validation and synthetic server/installer behavior; it cannot prove hardware installation or VPN switching. Detailed results distinguish captured reports, independently observed Mac jobs, and user-confirmed phone outcomes.
 
 ## License and dependencies
 

@@ -27,7 +27,7 @@ extension ProbeModel {
     func loadFlow() {
         guard let data = UserDefaults.standard.data(forKey: "buildInstallFlow"),
               var restored = try? JSONDecoder().decode(BuildFlowState.self, from: data) else { return }
-        if [.building, .installing].contains(restored.phase) {
+        if [.checking, .building, .downloading, .installing].contains(restored.phase), !MasterCoordinator.shared.working {
             restored.phase = .interrupted
             restored.result = "The app stopped mid-process. Restore Internet first. An installation may have completed; check the target app."
         }
@@ -39,7 +39,7 @@ extension ProbeModel {
         UserDefaults.standard.removeObject(forKey: "requestedBuildInstall")
         startBuildInstall()
     }
-    func startBuildInstall() {
+    func startLegacyBuildInstall() {
         guard !busy, !catalogLoading, flowIsIdle else { return }
         guard pairingReady, downloadReady, helpersReady else {
             liveStatus = "Complete the private preparation and network helper setup first."
@@ -55,7 +55,20 @@ extension ProbeModel {
         }
         flow = BuildFlowState()
         flow?.selection = selection
-        handoff(.connect)
+        flow?.phase = .checking
+        saveFlow()
+        let identifier = flow!.job
+        busy = true
+        liveStatus = "Checking the private Mac connection…"
+        Task {
+            let check = await BuildDownloader.checkMacConnection()
+            reports.append(check.diagnostic + (check.reachable ? "\nConnect helper: skipped." : "\nConnect helper: required."))
+            UserDefaults.standard.set(reports, forKey: "sanitizedReports")
+            busy = false
+            guard flow?.job == identifier, flow?.phase == .checking else { return }
+            if check.reachable { await buildAndDownload() }
+            else { handoff(.connect) }
+        }
     }
     func handoff(_ phase: BuildFlowState.Phase) {
         guard flow != nil else { return }
@@ -77,10 +90,21 @@ extension ProbeModel {
     func restoreInternet() {
         guard !busy else { return }
         if flow == nil { flow = BuildFlowState() }
+        flow?.purpose = nil
         flow?.started = Date()
         handoff(.restore)
     }
     func handleCallback(_ url: URL) {
+        if let current = MasterCoordinator.load(), current.acceptsMasterCallback(url) {
+            let outcome = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "outcome" }?.value
+            var updated = current
+            updated.phase = .interrupted
+            updated.nonce = UUID()
+            updated.result = outcome == "success" ? "Master Shortcut ended without a final result. Check the installed app and restore internet." : "Master Shortcut was cancelled or failed. Run Restore Internet; an install may have completed."
+            MasterCoordinator.save(updated)
+            syncMasterFlow()
+            return
+        }
         guard !busy, let current = flow, current.accepts(url) else { return }
         let success = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.filter { $0.name == "outcome" }.map(\.value) == ["success"]
         // Consume before scheduling work; duplicate callbacks cannot install twice.

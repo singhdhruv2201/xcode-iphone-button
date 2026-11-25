@@ -86,7 +86,7 @@ final class PinnedDownload: NSObject, URLSessionDownloadDelegate, @unchecked Sen
     }
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {}
 
-    func fetch(path: String, body: Data? = nil, requestTimeout: TimeInterval = 30) async throws -> URL {
+    func fetch(path: String, body: Data? = nil, requestTimeout: TimeInterval = 30, resourceTimeout: TimeInterval = 300) async throws -> URL {
         try settings.validate()
         guard let url = URL(string: settings.endpoint + path) else { throw DownloadIssue.invalidResponse }
         let config = URLSessionConfiguration.ephemeral
@@ -95,13 +95,13 @@ final class PinnedDownload: NSObject, URLSessionDownloadDelegate, @unchecked Sen
         config.urlCredentialStorage = nil
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         config.timeoutIntervalForRequest = requestTimeout
-        config.timeoutIntervalForResource = 300
+        config.timeoutIntervalForResource = resourceTimeout
         config.waitsForConnectivity = false
         config.allowsCellularAccess = true
         config.tlsMinimumSupportedProtocolVersion = .TLSv12
         let session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
         defer { session.invalidateAndCancel() }
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: url, timeoutInterval: requestTimeout)
         if let body {
             request.httpMethod = "POST"
             request.httpBody = body
@@ -128,6 +128,53 @@ final class PinnedDownload: NSObject, URLSessionDownloadDelegate, @unchecked Sen
 }
 
 public enum BuildDownloader {
+    public struct ConnectionCheck: Sendable {
+        public let reachable: Bool
+        public let diagnostic: String
+    }
+
+    /// A read-only, authenticated check; diagnostics omit addresses and credentials.
+    public static func checkMacConnection() async -> ConnectionCheck {
+        guard let settings = try? DownloadSettingsVault.load() else {
+            return ConnectionCheck(reachable: false, diagnostic: "Private Mac connection settings are unavailable.")
+        }
+        return await checkMacConnection(settings: settings)
+    }
+
+    public static func macIsReachable() async -> Bool {
+        await checkMacConnection().reachable
+    }
+
+    static func macIsReachable(settings: DownloadSettings) async -> Bool {
+        await checkMacConnection(settings: settings).reachable
+    }
+
+    static func checkMacConnection(settings: DownloadSettings) async -> ConnectionCheck {
+        let started = Date()
+        var reachable = false
+        let message: String
+        do {
+            let file = try await PinnedDownload(settings: settings, limit: 16_384)
+                .fetch(path: "/manifest.json", requestTimeout: 8, resourceTimeout: 8)
+            defer { try? FileManager.default.removeItem(at: file) }
+            let candidate = try JSONDecoder().decode(InstallCandidate.self, from: Data(contentsOf: file))
+            try candidate.validate()
+            guard candidate.bundleID == settings.targetBundleID else { throw DownloadIssue.wrongApp }
+            reachable = true
+            message = "Pinned HTTPS, authentication and Mac identity: accepted."
+        } catch let failure as DownloadConnectionFailure {
+            message = failure.diagnostic
+        } catch DownloadIssue.http(let status) {
+            message = "Mac returned HTTP status \(status)."
+        } catch DownloadIssue.wrongApp {
+            message = "Mac manifest does not match the private connection settings."
+        } catch {
+            message = "Private connection settings or Mac response failed validation."
+        }
+        let elapsed = String(format: "%.1f", Date().timeIntervalSince(started))
+        return ConnectionCheck(reachable: reachable, diagnostic: "Mac connection check (\(elapsed)s)\n" + message)
+    }
+
     public struct Job: Codable, Sendable {
         public let id: String
         public let status: String
@@ -148,7 +195,7 @@ public enum BuildDownloader {
         }
     }
 
-    public static func job(id: UUID, submit: Bool, selection: ProjectSelection? = nil) async throws -> Job {
+    public static func job(id: UUID, submit: Bool, selection: ProjectSelection? = nil, timeout: TimeInterval = 30) async throws -> Job {
         let settings = try DownloadSettingsVault.load()
         let identifier = id.uuidString.lowercased()
         var request = ["id": identifier]
@@ -159,7 +206,7 @@ public enum BuildDownloader {
         }
         let body = submit ? try JSONEncoder().encode(request) : nil
         let file = try await PinnedDownload(settings: settings, limit: 16_384)
-            .fetch(path: submit ? "/jobs" : "/jobs/" + identifier, body: body)
+            .fetch(path: submit ? "/jobs" : "/jobs/" + identifier, body: body, requestTimeout: timeout, resourceTimeout: timeout)
         defer { try? FileManager.default.removeItem(at: file) }
         let job = try JSONDecoder().decode(Job.self, from: Data(contentsOf: file))
         guard job.id == identifier, ["building", "ready", "failed"].contains(job.status) else {
