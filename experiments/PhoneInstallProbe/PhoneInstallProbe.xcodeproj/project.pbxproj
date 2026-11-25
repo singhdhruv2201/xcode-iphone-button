@@ -83,6 +83,15 @@
 				<string>000000000000000000000031</string>
 				<string>000000000000000000000051</string>
 				<string>000000000000000000000061</string>
+				<string>CAE62F5EE0C980B54D3C8793</string>
+				<string>22B3336C25D1B6DE34C44F2A</string>
+				<string>000000000000000000000065</string>
+				<string>000000000000000000000067</string>
+				<string>000000000000000000000069</string>
+				<string>00000000000000000000006B</string>
+				<string>00000000000000000000006D</string>
+				<string>00000000000000000000006F</string>
+				<string>000000000000000000000071</string>
 			</array>
 			<key>isa</key>
 			<string>PBXSourcesBuildPhase</string>
@@ -145,6 +154,15 @@
 				<string>000000000000000000000050</string>
 				<string>000000000000000000000060</string>
 				<string>000000000000000000000062</string>
+				<string>B91AEF5F777C81F1EBB90D1B</string>
+				<string>A75FE9798F3071171D89D509</string>
+				<string>000000000000000000000064</string>
+				<string>000000000000000000000066</string>
+				<string>000000000000000000000068</string>
+				<string>00000000000000000000006A</string>
+				<string>00000000000000000000006C</string>
+				<string>00000000000000000000006E</string>
+				<string>000000000000000000000070</string>
 			</array>
 			<key>isa</key>
 			<string>PBXGroup</string>
@@ -510,6 +528,168 @@
 			<string>PBXBuildFile</string>
 			<key>fileRef</key>
 			<string>000000000000000000000062</string>
+		</dict>
+		<key>B91AEF5F777C81F1EBB90D1B</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>App/InstallGuide.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>CAE62F5EE0C980B54D3C8793</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>B91AEF5F777C81F1EBB90D1B</string>
+		</dict>
+		<key>A75FE9798F3071171D89D509</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>App/ProbeInstallGuide.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>22B3336C25D1B6DE34C44F2A</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>A75FE9798F3071171D89D509</string>
+		</dict>
+		<key>000000000000000000000064</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>App/ProbeDesign.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>000000000000000000000065</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>000000000000000000000064</string>
+		</dict>
+		<key>000000000000000000000066</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>App/ProbeRoot.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>000000000000000000000067</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>000000000000000000000066</string>
+		</dict>
+		<key>000000000000000000000068</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>App/BuildDashboard.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>000000000000000000000069</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>000000000000000000000068</string>
+		</dict>
+		<key>00000000000000000000006A</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>App/ProjectBrowser.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>00000000000000000000006B</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>00000000000000000000006A</string>
+		</dict>
+		<key>00000000000000000000006C</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>App/ProbeSettings.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>00000000000000000000006D</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>00000000000000000000006C</string>
+		</dict>
+		<key>00000000000000000000006E</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>App/ProbeActivity.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>00000000000000000000006F</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>00000000000000000000006E</string>
+		</dict>
+		<key>000000000000000000000070</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>App/ProbeDiagnostics.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>000000000000000000000071</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>000000000000000000000070</string>
 		</dict>
 	</dict>
 	<key>rootObject</key>

@@ -23,7 +23,12 @@ final class ProbeModel: ObservableObject {
         didSet { UserDefaults.standard.set(helpersReady, forKey: "networkHelpersReady") }
     }
     @Published var busy = false
-    @Published var reports: [String] = []
+    @Published var reports: [String] = [] {
+        didSet { updateReportEntries() }
+    }
+    @Published private(set) var reportEntries: [ProbeReportEntry] = []
+    @Published var connectionCheckedAt: Date?
+    @Published var connectionReachable: Bool?
     @Published var wifiPath = "Checking"
     @Published var pairingStatus = "Not loaded"
     @Published var pairingReady = false
@@ -46,11 +51,21 @@ final class ProbeModel: ObservableObject {
         selectedProjectID = projectCache.selection?.projectID ?? ""
         selectedScheme = projectCache.selection?.scheme ?? ""
         if !selectedScheme.isEmpty { availableSchemes = [selectedScheme] }
+        updateReportEntries()
         loadFlow()
         wifiMonitor.start(queue: DispatchQueue(label: "PhoneInstallProbe.wifi"))
     }
 
     deinit { wifiMonitor.cancel() }
+
+    private func updateReportEntries() {
+        reportEntries = reports.enumerated().map { index, text in
+            if reportEntries.indices.contains(index), reportEntries[index].text == text {
+                return reportEntries[index]
+            }
+            return ProbeReportEntry(text: text)
+        }
+    }
 
     func refreshPairing() {
         guard !busy else { return }
@@ -82,6 +97,8 @@ final class ProbeModel: ObservableObject {
         liveStatus = "Checking the private Mac connection…"
         defer { busy = false }
         let check = await BuildDownloader.checkMacConnection()
+        connectionReachable = check.reachable
+        connectionCheckedAt = Date()
         liveStatus = check.diagnostic
         reports.append(check.diagnostic)
         UserDefaults.standard.set(reports, forKey: "sanitizedReports")
@@ -173,152 +190,5 @@ final class ProbeModel: ObservableObject {
         lines.append("Wi-Fi path after: \(wifiPath)")
         lines.append("Authentication and installation: NOT TESTED")
         reports.append(lines.joined(separator: "\n"))
-    }
-}
-
-struct ProbeView: View {
-    @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var model = ProbeModel()
-    @State private var host = "10.7.0.1"
-    @State private var stage = "Cellular + Tailscale"
-    @State private var wifiOff = false
-    private let stages = ["Cellular + Tailscale", "Cellular + LocalDevVPN", "Data off + LocalDevVPN", "Wi-Fi control"]
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                ProjectPickerSection(model: model)
-                Section("Build & Install") {
-                    if let selection = model.projectCache.selection {
-                        Text(selection.projectName).font(.headline)
-                        Text(selection.scheme).font(.caption).foregroundStyle(.secondary)
-                    } else { Text("Select a project and scheme above.").foregroundStyle(.secondary) }
-                    Button {
-                        model.startBuildInstall()
-                    } label: {
-                        Label("Build & Install", systemImage: "hammer.fill").frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(model.busy || model.catalogLoading || model.projectCache.selection == nil || !model.masterReady || !model.helpersReady || !model.pairingReady || !model.downloadReady || (model.flow != nil && model.flow?.phase != .done))
-                    if model.busy { ProgressView() }
-                    if !model.liveStatus.isEmpty { Text(model.liveStatus).font(.footnote) }
-                    Text("Keep the Mac awake and the phone unlocked. Unplug USB and turn Wi-Fi off. One master Shortcut runs the sequence and calls this app for download and installation.").font(.caption)
-                    Button("Restore Internet", systemImage: "antenna.radiowaves.left.and.right") { model.restoreInternet() }
-                        .disabled(model.busy)
-                    Text("If the app stops while offline, turn Cellular Data on in Settings and disconnect LocalDevVPN. Restore Internet is also available as a standalone Shortcut.").font(.caption).foregroundStyle(.secondary)
-                }
-                Section("Master Shortcut setup") {
-                    if let url = Bundle.main.url(forResource: "Probe Build & Install", withExtension: "shortcut") {
-                        ShareLink(item: url) { Label("Add Probe Build & Install", systemImage: "square.and.arrow.up") }
-                    }
-                    Text("Add the master Shortcut once and keep its exact name. Start builds using the button above so your selected project is securely linked to the run.").font(.caption)
-                    Toggle("Master Shortcut is configured", isOn: $model.masterReady)
-                }.disabled(model.busy)
-                Section("Connection and recovery helpers") {
-                    ForEach(["Probe Connect to Mac", "Probe Prepare Installation", "Probe Restore Internet"], id: \.self) { name in
-                        if let url = Bundle.main.url(forResource: name, withExtension: "shortcut") {
-                            ShareLink(item: url) { Label("Add " + name, systemImage: "square.and.arrow.up") }
-                        }
-                    }
-                    Text("Add the three helpers to Shortcuts using the buttons above. Keep their exact names. Run Restore Internet once to approve initial prompts.").font(.caption)
-                    Toggle("All three helpers are configured", isOn: $model.helpersReady)
-                }.disabled(model.busy)
-                Section {
-                    Text("Can this iPhone reach its own development service without Wi-Fi?")
-                    Text("Download a signed build from your Mac, then install it during a brief offline step. The controls below remain available for manual diagnostics.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                Section("Download from Mac · v6") {
-                    Text(model.downloadStatus).font(.footnote)
-                    Button("Check private Mac connection") { Task { await model.diagnoseMacConnection() } }
-                        .disabled(model.busy || model.catalogLoading || !model.flowIsIdle || !model.downloadReady)
-                    Button("Download latest build") {
-                        Task { await model.downloadBuild(stage: stage) }
-                    }
-                    .disabled(model.busy || !model.downloadReady || !wifiOff || stage != "Cellular + Tailscale")
-                    Text("Unplug USB and keep Wi-Fi off. Leave Cellular Data ON, disconnect LocalDevVPN, and connect Tailscale. Select Cellular + Tailscale in Test setup, then download. Keep this app open until it finishes.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                Section("Authenticated test · v6") {
-                    Text(model.pairingStatus).font(.footnote)
-                    Button("Load private USB preparation") { model.refreshPairing() }
-                        .disabled(model.busy)
-                    Button("Test authenticated service") {
-                        Task { await model.authenticate(host: host.trimmingCharacters(in: .whitespacesAndNewlines), stage: stage) }
-                    }
-                    .disabled(model.busy || !model.pairingReady || !wifiOff || stage != "Data off + LocalDevVPN" || !DeviceProbe.isLocalAddress(host))
-                    Text("For this test, unplug USB, keep Wi-Fi off, connect LocalDevVPN, and turn Cellular Data off. Select Data off + LocalDevVPN in Test setup. Afterward, restore Cellular Data.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Text("The service test only looks up this probe. The library may request trust again if verification fails. Some protocol waits have no overall deadline.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    if !model.liveStatus.isEmpty { Text(model.liveStatus).font(.footnote).textSelection(.enabled) }
-                }
-                Section("Staged installation") {
-                    if let candidate = model.candidate {
-                        Text("\(candidate.displayName) · build \(candidate.buildVersion)")
-                        Text("\(candidate.byteCount / 1_024) KiB · \(model.artifactSource)")
-                            .font(.caption).foregroundStyle(.secondary)
-                        Button("Install staged build") {
-                            Task { await model.authenticate(host: host.trimmingCharacters(in: .whitespacesAndNewlines), stage: stage, install: true) }
-                        }
-                        .disabled(model.busy || !model.pairingReady || !wifiOff || stage != "Data off + LocalDevVPN" || !DeviceProbe.isLocalAddress(host))
-                        Text("Updates this app if it is already installed. Verifies the staged file, requests installation, and checks the installed build number. Open the target app manually afterward.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    } else {
-                        Text("No signed build staged. Download a build from the Mac first.")
-                    }
-                }
-                Section("Test setup") {
-                    Picker("Current setup", selection: $stage) {
-                        ForEach(stages, id: \.self) { Text($0) }
-                    }
-                    TextField("Device IP from LocalDevVPN", text: $host)
-                        .keyboardType(.decimalPad).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    Text("Use Device IP in LocalDevVPN Settings, without /32. This is not your Mac’s address or the VPN’s Tunnel IP.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    LabeledContent("Wi-Fi path", value: model.wifiPath)
-                    Toggle("Wi-Fi is off in Settings; USB unplugged", isOn: $wifiOff)
-                    Text("Select a setup only after changing it yourself. A network-path check alone cannot verify the radio or VPN app in use.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }.disabled(model.busy)
-                Section {
-                    Button {
-                        let endpoint = host.trimmingCharacters(in: .whitespacesAndNewlines)
-                        Task { await model.run(host: endpoint, stage: stage) }
-                    } label: {
-                        HStack {
-                            Text(model.busy ? "Checking…" : "Check local services")
-                            Spacer()
-                            if model.busy { ProgressView() }
-                        }
-                    }
-                    .disabled(model.busy || (!wifiOff && stage != "Wi-Fi control") || !DeviceProbe.isLocalAddress(host))
-                    Text("Each check takes at most about 12 seconds. An open port is only a first step; it does not prove installation works.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                if !model.reports.isEmpty {
-                    Section("Results") {
-                        ForEach(Array(model.reports.enumerated()), id: \.offset) { _, report in
-                            Text(report).font(.system(.footnote, design: .monospaced)).textSelection(.enabled)
-                        }
-                        ShareLink("Share results", item: model.reports.joined(separator: "\n\n"))
-                        Button("Clear results", role: .destructive) {
-                            model.reports = []
-                            UserDefaults.standard.removeObject(forKey: "sanitizedReports")
-                        }.disabled(model.busy)
-                    }
-                }
-            }
-            .navigationTitle("Phone Install Probe")
-            .task {
-                model.refreshPairing()
-                model.consumeBuildRequest()
-                if model.downloadReady && model.flowIsIdle { await model.refreshProjects() }
-            }
-            .onOpenURL { model.handleCallback($0) }
-            .onReceive(NotificationCenter.default.publisher(for: .init("masterFlowChanged"))) { _ in model.syncMasterFlow() }
-            .onReceive(NotificationCenter.default.publisher(for: .init("requestedBuildInstall"))) { _ in model.consumeBuildRequest() }
-            .onChange(of: scenePhase) { _, phase in if phase == .active { model.syncMasterFlow(); model.refreshPairing(); model.consumeBuildRequest() } }
-        }
     }
 }

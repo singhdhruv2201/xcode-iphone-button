@@ -16,6 +16,10 @@ App: Build & Install
 
 The installation step is briefly **offline**. This is not continuous installation over a cellular device tunnel: Tailscale carries the build request/download, and LocalDevVPN provides the phone's local development-service connection afterward. One-time USB preparation is required; routine target updates do not need USB or a preceding Wi-Fi session.
 
+**Already installed the phone app? Start with the [iPhone getting-started guide](docs/iphone-getting-started.md).** It walks through first launch, adding the Shortcuts, choosing a project, and installing your first build.
+
+**Setting up the Mac too? Follow the [complete setup tutorial](docs/one-tap-installation.md).** It covers Xcode signing, both VPN apps, private USB preparation, the Mac server, and troubleshooting.
+
 ## Choose a workflow
 
 | Workflow | Builds | Installs through | Setup |
